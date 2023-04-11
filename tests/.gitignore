@@ -1,0 +1,10 @@
+*.o
+controlexp
+lexfuncs1
+lexfuncs2
+literals
+macros
+names
+operators
+structures
+testharness.lib

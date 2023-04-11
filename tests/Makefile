@@ -7,9 +7,9 @@
 # All rights reserved.
 # Distributed under license.  See LICENSE.TXT for details.
 
-BLISSC = @top_builddir@/blissc
-TESTDIR = @top_srcdir@/tests
-PYTHON = @PYTHON@
+BLISSC = ../build/blissc
+TESTDIR = .
+PYTHON = python3
 
 .PHONY: check all install distdir dist
 

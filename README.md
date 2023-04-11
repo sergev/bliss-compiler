@@ -30,19 +30,8 @@ gcc 9 and LLVM 9.0.1 (prebuilt llvm-9-dev package) and LLVM
 
 ## Building the compiler
 
-First, clone [the repository](https://github.com/madisongh/blissc.git).
+First, clone [the repository](https://github.com/sergev/bliss-compiler.git).
 
-### Using Autotools
-1. cd to the top-level source directory and run `autoreconf -i`.
-2. If you want to build outside the source tree, cd to your
-   build directory.
-3. Run the `configure` script that was generated in step 2.  If
-   `llvm-config` is not in your PATH, use the `--with-llvm-config`
-   option on `configure` to specify its location.
-4. Run `make` to build the compiler.
-5. Run `make check` to test the built compiler.
-
-### Using CMake
 1. Create a directory for the build.
 2. Run `cmake <path-to-sources>` to generate the build files.
    CMake will attempt to locate a usable copy of LLVM automatically,
@@ -61,5 +50,5 @@ and options.
 License
 -------
 All sources are released under the BSD 2-clause license.  See the
-[LICENSE.TXT](https://github.com/madisongh/blissc/blob/master/LICENSE.TXT)
+[LICENSE.TXT](LICENSE.TXT)
 file for the license text.

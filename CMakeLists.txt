@@ -58,7 +58,7 @@ target_link_libraries(blissc
   libllvmgen
   ${LLVM_LIBRARIES}
   ${LLVM_SYSTEM_LIBS})
-target_link_options(blissc PUBLIC ${LLVM_LDFLAGS} -Wl,-rpath=${LLVM_LIBDIR} -Wl,-rpath-link=${LLVM_LIBDIR})
+target_link_options(blissc PUBLIC ${LLVM_LDFLAGS})
 configure_file(${CMAKE_SOURCE_DIR}/cmake/config.h.in ${blissc_BINARY_DIR}/include/blissc/config.h @ONLY)
 
 if (${Python3_FOUND})
