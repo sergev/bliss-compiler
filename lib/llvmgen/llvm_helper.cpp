@@ -29,7 +29,11 @@
 #include "llvm_helper.h"
 #include "llvm/IR/Instructions.h"
 
+#if LLVM_VERSION_MAJOR > 11
+#include "llvm/MC/TargetRegistry.h"
+#else
 #include "llvm/Support/TargetRegistry.h"
+#endif
 #include "llvm/Support/Host.h"
 
 using namespace llvm;
