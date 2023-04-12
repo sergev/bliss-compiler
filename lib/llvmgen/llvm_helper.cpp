@@ -30,12 +30,13 @@
 #include "llvm/IR/Instructions.h"
 
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/Host.h"
 
 using namespace llvm;
 
 void HelperSetAllocaAlignment(LLVMValueRef Inst, unsigned int Bytes) {
 #if LLVM_VERSION_MAJOR > 9
-    reinterpret_cast<AllocaInst*>(Inst)->setAlignment(llvm::MaybeAlign(Bytes));
+    reinterpret_cast<AllocaInst*>(Inst)->setAlignment(llvm::Align(Bytes));
 #else
     reinterpret_cast<AllocaInst*>(Inst)->setAlignment(Bytes);
 #endif
