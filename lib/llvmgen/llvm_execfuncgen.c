@@ -39,10 +39,10 @@ FUNCGENDEF("CH$MOVE",          gen_ch_move,         0) \
 FUNCGENDEF("CH$FILL",          gen_ch_fill,         0) \
 FUNCGENDEF("CH$EQL",           gen_ch_compare,      LLVMIntEQ) \
 FUNCGENDEF("CH$NEQ",           gen_ch_compare,      LLVMIntNE) \
-FUNCGENDEF("CH$LSS",           gen_ch_compare,      LLVMIntULT) \
-FUNCGENDEF("CH$LEQ",           gen_ch_compare,      LLVMIntULE) \
-FUNCGENDEF("CH$GTR",           gen_ch_compare,      LLVMIntUGT) \
-FUNCGENDEF("CH$GEQ",           gen_ch_compare,      LLVMIntUGE) \
+FUNCGENDEF("CH$LSS",           gen_ch_compare,      LLVMIntSLT) \
+FUNCGENDEF("CH$LEQ",           gen_ch_compare,      LLVMIntSLE) \
+FUNCGENDEF("CH$GTR",           gen_ch_compare,      LLVMIntSGT) \
+FUNCGENDEF("CH$GEQ",           gen_ch_compare,      LLVMIntSGE) \
 FUNCGENDEF("CH$COMPARE",       gen_ch_compare,      -1) \
 FUNCGENDEF("CH$FIND_CH",       gen_ch_find,         0) \
 FUNCGENDEF("CH$FIND_NOT_CH",   gen_ch_find,         1) \
@@ -511,6 +511,8 @@ gen_ch_compare (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef need
     argvals[1] = LLVMBuildGEP2(builder, gctx->unittype, ptr1, &bound, 1, llvmgen_temp(gctx));
     argvals[2] = fill;
     result = llvmgen_asminstr(gctx, "SCASB_CMP", argvals, 3);
+    // SCASB computed fill - str1, i.e. str2 - str1: flip the sign
+    result = LLVMBuildNeg(builder, result, llvmgen_temp(gctx));
     llvmgen_btrack_update(gctx, bt, result);
 
     result = llvmgen_btrack_finalize(gctx, bt, gctx->fullwordtype);
