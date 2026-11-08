@@ -566,6 +566,10 @@ bind_literal (lexctx_t lctx, void *vctx, quotelevel_t ql, quotemodifier_t qm,
     if (qm == QM_QUOTE || ql != QL_NORMAL) {
         return 0;
     }
+    if (lit->attr.sc == SYMSCOPE_EXTERNAL) {
+        lexeme_type_set(lex, LEXTYPE_NAME_LITERAL);
+        return 0;   // link-time value; see bind_extliteral
+    }
     if ((lit->attr.flags & SYM_M_NOVALUE)) {
         expr_signal(ctx, STC__LITNOVAL, lexeme_text(lex));
         val = 0;
@@ -643,6 +647,34 @@ bind_data (expr_ctx_t ctx, lextype_t lt, lexeme_t *lex)
     return exp;
 
 } /* bind_data */
+
+/*
+ * bind_extliteral
+ *
+ * Binds an EXTERNAL LITERAL to an expression node.  Its value
+ * is known only at link time: the address of the symbol.
+ */
+static expr_node_t *
+bind_extliteral (expr_ctx_t ctx, lextype_t lt, lexeme_t *lex)
+{
+    parse_ctx_t pctx = expr_parse_ctx(ctx);
+    name_t *np = lexeme_ctx_get(lex);
+    sym_literal_t *lit;
+    expr_node_t *exp;
+
+    if (np == 0) {
+        return 0;
+    }
+    lit = name_extraspace(np);
+    exp = expr_node_alloc(ctx, EXPTYPE_PRIM_SEG, parser_curpos(pctx));
+    expr_seg_name_set(exp, np);
+    expr_seg_width_set(exp, lit->attr.width);
+    expr_seg_signext_set(exp, (lit->attr.flags & SYM_M_SIGNEXT) != 0);
+    expr_is_ltce_set(exp, 1);
+    expr_has_value_set(exp, 1);
+    return exp;
+
+} /* bind_extliteral */
 
 /*
  * Structure for serializing data attributes.
@@ -948,6 +980,7 @@ symbols_init (expr_ctx_t ctx)
     lextype_register(lctx, ctx, LEXTYPE_NAME_LITERAL, bind_literal);
     expr_dispatch_register(ctx, LEXTYPE_NAME_DATA, bind_data);
     expr_dispatch_register(ctx, LEXTYPE_NAME_ROUTINE, bind_routine);
+    expr_dispatch_register(ctx, LEXTYPE_NAME_LITERAL, bind_extliteral);
     nametype_dataop_register(namectx, LEXTYPE_NAME_COMPILETIME, &compiletime_vec, symctx);
 
     return symctx;

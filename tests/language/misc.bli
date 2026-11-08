@@ -3,7 +3,7 @@ BEGIN
 
 ! Features not covered elsewhere: embedded comments, SELECTA/U,
 ! address relations, DECRA, VOLATILE, PSECT, FORWARD/EXTERNAL data,
-! GLOBAL BIND, general structure references,
+! EXTERNAL/GLOBAL LITERAL, GLOBAL BIND, general structure references,
 ! SWITCHES, REQUIRE, %REQUIRE, %QUOTENAME, CH$SIZE,
 ! CODECOMMENT, BUILTIN, QUAD, UNDECLARE, low-bit tests.
 
@@ -17,6 +17,15 @@ FORWARD
 
 EXTERNAL
     test_extdata : VECTOR [3];
+
+EXTERNAL LITERAL
+    test_extlit;
+
+GLOBAL LITERAL
+    test_globlit = -77;
+
+EXTERNAL ROUTINE
+    test_globlit_value;
 
 PSECT
     OWN = mydata;
@@ -37,13 +46,13 @@ UNDECLARE tmp;
 BUILTIN
     MOVSB;
 
-test_setup(numcases=20);
+test_setup(numcases=22);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL a, b, p;
 
-    CASE .caseno FROM 1 TO 20 OF
+    CASE .caseno FROM 1 TO 22 OF
     SET
         [1] : test_output(.caseno, 'comment=%ld', 1 %( + 100
                                                    + 200 )% + 2);
@@ -122,6 +131,13 @@ BEGIN
 !! 19 undeclare=0
         [20] : test_output(.caseno, 'reqfunc=%ld', %REQUIRE ('miscexp.req') + 1);
 !! 20 reqfunc=43
+        [21] : BEGIN
+            OWN init : VECTOR [2] INITIAL (test_extlit, test_extlit + 1);
+            test_output(.caseno, 'extlit=%ld,%ld,%ld', test_extlit - 4, .init[0], .init[1]);
+        END;
+!! 21 extlit=1230,1234,1235
+        [22] : test_output(.caseno, 'globlit=%ld,%ld', test_globlit, test_globlit_value ());
+!! 22 globlit=-77,-77
     TES;
 END;
 

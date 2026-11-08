@@ -508,8 +508,10 @@ EXTERNAL LITERAL max_users;            ! value comes from the linker
 
 A literal has no address; use it without a dot.
 
-**blissc:** `EXTERNAL LITERAL` is not supported: a `GLOBAL LITERAL` is
-exported as a constant variable, not as a link-time value.
+A `GLOBAL LITERAL` is exported as an absolute symbol whose value is the
+literal. An `EXTERNAL LITERAL` is a link-time constant: you can use it in
+expressions and in `INITIAL`/`PLIT` values, but not where a compile-time
+constant is needed (another `LITERAL`, a vector size, `%IF`).
 
 ### BIND: another name for an address
 

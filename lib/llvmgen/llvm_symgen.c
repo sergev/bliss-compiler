@@ -136,11 +136,10 @@ llvmgen_label_btrack_set (name_t *np, llvm_btrack_t *bt)
 /*
  * litsym_generator
  *
- * Generates LLVM for a [GLOBAL] LITERAL.
- *
- * XXX Not sure that the way LLVM handles global constants
- * exactly matches the semantics the BLISS LRM describes.
- *
+ * Generates LLVM for a GLOBAL or EXTERNAL LITERAL.  A literal's
+ * link-time value is the address of a symbol: a GLOBAL LITERAL is
+ * exported as an absolute symbol, and an EXTERNAL LITERAL refers
+ * to one.  Other literals are bound to their values by the front end.
  */
 static int
 litsym_generator (void *vctx, name_t *np, void *p)
@@ -148,31 +147,24 @@ litsym_generator (void *vctx, name_t *np, void *p)
     gencodectx_t gctx = vctx;
     literal_attr_t *attr = litsym_attr(np);
     llvm_litsym_t *ll = p;
-    llvm_litsym_t *gll = 0;
-    namectx_t namectx = scope_namectx(name_scope(np));
-    name_t *gnp;
-    LLVMTypeRef type;
+    LLVMValueRef v;
 
-    gnp = name_globalname(namectx, np);
-    if (gnp != 0) {
-        gll = sym_genspace(gnp);
-        if (gll->value != 0) {
-            ll->value = gll->value;
-            return 1;
+    if (gctx->module == 0) {
+        return 1;
+    }
+    if (attr->sc == SYMSCOPE_EXTERNAL) {
+        v = LLVMGetNamedGlobal(gctx->module, name_azstring(np));
+        if (v == 0) {
+            v = LLVMGetNamedGlobalAlias(gctx->module, name_azstring(np), strlen(name_azstring(np)));
         }
-    }
-    type = LLVMIntTypeInContext(gctx->llvmctx, attr->width);
-    if ((attr->flags & SYM_M_SIGNEXT) != 0) {
-        ll->value = LLVMConstInt(type, (unsigned long long int) name_value_signed(np), 1);
-    } else {
-        ll->value = LLVMConstInt(type, name_value_unsigned(np), 0);
-    }
-    if (gnp != 0 && gll != 0) {
-        LLVMValueRef globalval;
-        gll->value = ll->value;
-        globalval = LLVMAddGlobal(gctx->module, type, name_azstring(np));
-        LLVMSetInitializer(globalval, gll->value);
-        LLVMSetGlobalConstant(globalval, 1);
+        if (v == 0) {
+            v = LLVMAddGlobal(gctx->module, gctx->unittype, name_azstring(np));
+        }
+        ll->value = v;
+    } else if (attr->sc == SYMSCOPE_GLOBAL) {
+        v = LLVMConstInt(gctx->fullwordtype, (unsigned long long int) name_value_signed(np), 1);
+        v = LLVMConstIntToPtr(v, LLVMPointerTypeInContext(gctx->llvmctx, 0));
+        ll->value = LLVMAddAlias2(gctx->module, gctx->unittype, 0, v, name_azstring(np));
     }
 
     return 1;
@@ -983,6 +975,15 @@ llvmgen_segaddress (gencodectx_t gctx, name_t *np, llvm_stgclass_t *segclassp,
             }
         }
         return val;
+    }
+    if (ntype == LEXTYPE_NAME_LITERAL) {
+        // EXTERNAL LITERAL: the value is the address of the symbol
+        llvm_litsym_t *ll = sym_genspace(np);
+        if (ll->value == 0) litsym_generator(gctx, np, ll);    // e.g. from a library
+        if (segclassp != 0) *segclassp = LLVM_GLOBAL;
+        if (flagsp != 0) *flagsp = 0;
+        if (llvm_type != 0) *llvm_type = gctx->unittype;
+        return ll->value;
     }
     // Should never be called on any other name types
     expr_signal(gctx->ectx, STC__INTCMPERR, "llvm_segaddress");
