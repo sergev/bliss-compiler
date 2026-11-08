@@ -1,0 +1,163 @@
+MODULE test =
+BEGIN
+
+! Operator expressions (LRM 5.1) and executable functions (LRM 5.2).
+
+LIBRARY 'testharness.lib';
+
+OWN
+    x,
+    y,
+    vec : VECTOR [4] INITIAL (10, 20, 30, 40);
+
+ROUTINE deref (p) = ..p;
+
+ROUTINE count_args (a, b, c) = .a + .b + .c;
+
+test_setup(numcases=30);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL a, b, p;
+
+    CASE .caseno FROM 1 TO 30 OF
+    SET
+        [1] : BEGIN
+            a = -19; b = 7;
+            test_output(.caseno, 'div=%ld,%ld,%ld,%ld,%ld,%ld', 10 / 3, 10 / -3, -19 / 7, -19 / -7,
+                .a / .b, .a / -.b);
+        END;
+!! 1 div=3,-3,-2,2,-2,2
+        [2] : BEGIN
+            a = -19; b = 7;
+            test_output(.caseno, 'mod=%ld,%ld,%ld,%ld', 10 MOD 3, 10 MOD -3, .a MOD .b, .a MOD -.b);
+        END;
+!! 2 mod=1,1,-5,-5
+        [3] : BEGIN
+            a = 13;
+            test_output(.caseno, 'moddigits=%ld,%ld,%ld,%ld', .a MOD 2, .a MOD 8, .a MOD 10, .a MOD 16);
+        END;
+!! 3 moddigits=1,5,3,13
+        [4] : BEGIN
+            a = 3;
+            test_output(.caseno, 'shiftl=%ld,%ld', 1 ^ 10, .a ^ 4);
+        END;
+!! 4 shiftl=1024,48
+        [5] : BEGIN
+            a = 1024; b = -64;
+            test_output(.caseno, 'shiftr=%ld,%ld', .a ^ -3, .b ^ -2);
+        END;
+!! 5 shiftr=128,-16
+        [6] : BEGIN
+            a = -1; b = 1;
+            test_output(.caseno, 'signed=%ld,%ld,%ld', .a LSS .b, .a GTR .b, .a LEQ .a);
+        END;
+!! 6 signed=1,0,1
+        [7] : BEGIN
+            a = -1; b = 1;
+            test_output(.caseno, 'unsigned=%ld,%ld,%ld', .a LSSU .b, .a GTRU .b, .a GEQU .b);
+        END;
+!! 7 unsigned=0,1,1
+        [8] : BEGIN
+            a = 5; b = 5;
+            test_output(.caseno, 'eql=%ld,%ld,%ld,%ld', .a EQL .b, .a NEQ .b, .a EQLU .b, .a NEQU 6);
+        END;
+!! 8 eql=1,0,1,1
+        [9] : test_output(.caseno, 'addrcmp=%ld,%ld,%ld', vec[1] GTRA vec[0], vec[0] LSSA vec[3], vec[2] EQLA vec[2]);
+!! 9 addrcmp=1,1,1
+        [10] : BEGIN
+            a = %B'1100'; b = %B'1010';
+            test_output(.caseno, 'bool=%ld,%ld,%ld', .a AND .b, .a OR .b, .a XOR .b);
+        END;
+!! 10 bool=8,14,6
+        [11] : BEGIN
+            a = %B'1100'; b = %B'1010';
+            test_output(.caseno, 'eqv=%ld,%ld', (.a EQV .b) AND %B'1111', NOT 0);
+        END;
+!! 11 eqv=9,-1
+        [12] : test_output(.caseno, 'prec=%ld,%ld,%ld', 2 + 3 * 4, (2 + 3) * 4, 100 - 10 - 1);
+!! 12 prec=14,20,89
+        [13] : test_output(.caseno, 'prec2=%ld,%ld,%ld', 16 / 2 ^ 2, 1 + 1 ^ 3, 1 + 2 EQL 3);
+!! 13 prec2=2,9,1
+        [14] : test_output(.caseno, 'prec3=%ld,%ld', NOT 1 EQL 2, 1 OR 2 AND 0);
+!! 14 prec3=-1,1
+        [15] : BEGIN
+            a = b = 7;
+            test_output(.caseno, 'chainassign=%ld,%ld', .a, .b);
+        END;
+!! 15 chainassign=7,7
+        [16] : BEGIN
+            a = (b = 3) + 1;
+            test_output(.caseno, 'assignval=%ld,%ld', .a, .b);
+        END;
+!! 16 assignval=4,3
+        [17] : BEGIN
+            p = x;
+            .p = 99;
+            test_output(.caseno, 'indirect=%ld,%ld', .x, ..p);
+        END;
+!! 17 indirect=99,99
+        [18] : BEGIN
+            p = vec;
+            test_output(.caseno, 'addrarith=%ld,%ld', .(.p + %UPVAL), .(.p + 3 * %UPVAL));
+        END;
+!! 18 addrarith=20,40
+        [19] : BEGIN
+            a = 5;
+            test_output(.caseno, 'unary=%ld,%ld,%ld', -.a, - -.a, +.a);
+        END;
+!! 19 unary=-5,5,5
+        [20] : BEGIN
+            a = 0; b = 0;
+            IF .a EQL 0 OR (b = 1) THEN a = 1;
+            test_output(.caseno, 'eval=%ld', .a);
+        END;
+!! 20 eval=1
+        [21] : test_output(.caseno, 'sign=%ld,%ld,%ld', SIGN(5), SIGN(0), SIGN(-5));
+!! 21 sign=1,0,-1
+        [22] : BEGIN
+            a = -42;
+            test_output(.caseno, 'abs=%ld,%ld,%ld', ABS(5), ABS(-5), ABS(.a));
+        END;
+!! 22 abs=5,5,42
+        [23] : BEGIN
+            a = -3;
+            test_output(.caseno, 'max=%ld,%ld,%ld', MAX(1, 7, 3), MIN(4, .a, 9), MAX(.a, 2));
+        END;
+!! 23 max=7,-3,2
+        [24] : BEGIN
+            a = -1;
+            test_output(.caseno, 'maxu=%ld,%ld', MAXU(.a, 5), MINU(.a, 5));
+        END;
+!! 24 maxu=-1,5
+        [25] : test_output(.caseno, 'maxa=%ld', MAXA(vec[1], vec[2]) EQLA vec[2]);
+!! 25 maxa=1
+        [26] : BEGIN
+            a = 20;
+            test_output(.caseno, 'ref=%ld', deref(%REF(.a + 1)));
+        END;
+!! 26 ref=21
+        [27] : test_output(.caseno, 'constfold=%ld,%ld', SIGN(-9) * ABS(-9), MAX(1, 2) + MIN(3, 4));
+!! 27 constfold=-9,5
+        [28] : BEGIN
+            a = 6;
+            test_output(.caseno, 'callexpr=%ld', count_args(.a, .a * 2, .a / 2));
+        END;
+!! 28 callexpr=21
+        [29] : BEGIN
+            y = 0;
+            vec[(y = .y + 1)] = 77;
+            test_output(.caseno, 'sideeffect=%ld,%ld', .y, .vec[1]);
+            vec[1] = 20;
+        END;
+!! 29 sideeffect=1,77
+        [30] : BEGIN
+            a = 1 ^ (%BPVAL - 1);
+            test_output(.caseno, 'minint=%ld,%ld', .a LSS 0, -1 GTRU .a);
+        END;
+!! 30 minint=1,1
+    TES;
+END;
+
+END
+ELUDOM

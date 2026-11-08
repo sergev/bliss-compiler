@@ -54,11 +54,11 @@ BEGIN
     .shadow
 END;
 
-test_setup(numcases=23);
+test_setup(numcases=27);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 23 OF
+    CASE .caseno FROM 1 TO 27 OF
     SET
         [1] : test_output(.caseno, 'literals=%ld,%ld,%ld,%c', k1, k2, kneg, kchar);
 !! 1 literals=10,32,-5,Z
@@ -139,6 +139,38 @@ BEGIN
             test_output(.caseno, 'localpreset=%ld,%ld,%ld', .lp[0], .lp[1], .lp[3]);
         END;
 !! 23 localpreset=0,21,43
+        [24] : BEGIN
+            LOCAL q;
+            q = 5;
+            BEGIN
+                LOCAL p : INITIAL (.q + 1);     ! evaluated at block entry
+                test_output(.caseno, 'blockinit=%ld', .p);
+            END;
+        END;
+!! 24 blockinit=6
+        [25] : BEGIN
+            LOCAL a : INITIAL (3), b : INITIAL (.a * 10);
+            test_output(.caseno, 'initorder=%ld', .b);
+        END;
+!! 25 initorder=30
+        [26] : BEGIN
+            LOCAL idx;
+            idx = 2;
+            BEGIN
+                BIND elem = gvec[.idx];        ! bound at block entry
+                test_output(.caseno, 'blockbind=%ld', .elem);
+            END;
+        END;
+!! 26 blockbind=9
+        [27] : BEGIN
+            LOCAL fp;
+            fp = counter_next;
+            BEGIN
+                BIND ROUTINE f = .fp;
+                test_output(.caseno, 'blockbindrtn=%ld', f() GTR 0);
+            END;
+        END;
+!! 27 blockbindrtn=1
     TES;
 END;
 
