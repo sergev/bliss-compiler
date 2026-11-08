@@ -485,8 +485,15 @@ gen_incr_decr_loop (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     testblk = LLVMInsertBasicBlockInContext(gctx->llvmctx, loopblk, llvmgen_label(gctx));
     if (expr_idloop_init(exp) != 0) {
         initval = llvmgen_expression(gctx, expr_idloop_init(exp), gctx->fullwordtype);
+    } else if (!is_decr) {
+        initval = zero;
+    } else if (compareop == OPER_CMP_GEQ ||
+               (compareop == OPER_CMP_GEQA && addrsigned)) {
+        // DECR starts at the largest signed value
+        initval = LLVMConstInt(gctx->fullwordtype,
+                               (1ULL << (machine_scalar_bits(gctx->mach) - 1)) - 1, 0);
     } else {
-        initval = (is_decr ? neg1 : zero); // -1 (unsigned) is +Infinity
+        initval = neg1;  // largest unsigned value
     }
     if (expr_idloop_term(exp) != 0) {
         endval = llvmgen_expression(gctx, expr_idloop_term(exp), gctx->fullwordtype);
@@ -508,7 +515,11 @@ gen_incr_decr_loop (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     if (!llvmgen_predfromop(compareop, addrsigned, &pred)) {
         log_signal(expr_logctx(gctx->ectx), expr_textpos(exp), STC__INTCMPERR, __func__);
     }
-    cmpval = LLVMBuildICmp(builder, pred, testphi, endval, llvmgen_temp(gctx));
+    if (expr_idloop_term(exp) == 0 && !is_decr) {
+        cmpval = LLVMConstAllOnes(gctx->int1type);  // INCR without TO: no end test
+    } else {
+        cmpval = LLVMBuildICmp(builder, pred, testphi, endval, llvmgen_temp(gctx));
+    }
     LLVMBuildCondBr(builder, cmpval, loopblk, exitblk);
     llvmgen_btrack_update_phi(gctx, bt, LLVMGetInsertBlock(builder), neg1);
     llvmgen_btrack_update_brcount(gctx, bt);
