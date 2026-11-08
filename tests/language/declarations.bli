@@ -2,7 +2,7 @@ MODULE test =
 BEGIN
 
 ! Declarations: storage classes, INITIAL/PRESET, BIND, LITERAL,
-! MAP, UNDECLARE, scoping, and PLITs.
+! MAP, UNDECLARE, scoping, PLITs, GLOBAL/EXTERNAL REGISTER.
 
 LIBRARY 'testharness.lib';
 
@@ -54,11 +54,44 @@ BEGIN
     .shadow
 END;
 
-test_setup(numcases=27);
+! GLOBAL REGISTER segments are shared with called routines whose
+! linkage names them in a GLOBAL option (LRM 10.8, 10.9).
+LINKAGE
+    glnk = CALL : GLOBAL (gctr = 3);
+
+ROUTINE gbump : glnk NOVALUE =
+    BEGIN
+    EXTERNAL REGISTER gctr;                 ! register 3, from the linkage
+    gctr = .gctr + 1
+    END;
+
+ROUTINE gbump10 : NOVALUE =
+    BEGIN
+    EXTERNAL REGISTER c = 3;
+    c = .c + 10
+    END;
+
+ROUTINE gclobber : NOVALUE =
+    BEGIN
+    GLOBAL REGISTER x = 3;                  ! restored on return
+    x = 999
+    END;
+
+ROUTINE guser =
+    BEGIN
+    GLOBAL REGISTER gctr = 3 : INITIAL (5);
+    gbump ();
+    gbump ();
+    gbump10 ();
+    gclobber ();
+    .gctr
+    END;
+
+test_setup(numcases=28);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 27 OF
+    CASE .caseno FROM 1 TO 28 OF
     SET
         [1] : test_output(.caseno, 'literals=%ld,%ld,%ld,%c', k1, k2, kneg, kchar);
 !! 1 literals=10,32,-5,Z
@@ -171,6 +204,8 @@ BEGIN
             END;
         END;
 !! 27 blockbindrtn=1
+        [28] : test_output(.caseno, 'globalreg=%ld', guser ());
+!! 28 globalreg=17
     TES;
 END;
 

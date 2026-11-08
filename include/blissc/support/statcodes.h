@@ -179,7 +179,8 @@ STATCODE(128,E,WEAKNOTGBL,"WEAK can only be used in GLOBAL or EXTERNAL declarati
 STATCODE(129,E,LNKTYPUNS, "linkage type !SD not supported") \
 STATCODE(130,E,LNKREGUNS, "REGISTER parameter locations not supported") \
 STATCODE(131,E,LNKNAMEXP, "linkage name expected") \
-STATCODE(132,E,LNKFNLNK,  "!SD requires a CALL linkage")
+STATCODE(132,E,LNKFNLNK,  "!SD requires a CALL linkage") \
+STATCODE(133,E,REGNUMERR, "invalid or missing register number (!IL)")
 
 typedef unsigned int statcode_t;
 #ifdef STATCODES_INSTANTIATE

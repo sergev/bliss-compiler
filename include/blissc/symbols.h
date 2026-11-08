@@ -39,6 +39,8 @@ typedef enum {
 #define SYM_M_BIND      (1U<<8U)
 #define SYM_M_PLIT      (1U<<9U)
 #define SYM_M_WEAK      (1U<<10U)
+#define SYM_M_GREG      (1U<<11U)   // GLOBAL REGISTER
+#define SYM_M_EXTREG    (1U<<12U)   // EXTERNAL REGISTER
 
 #define PSECT_M_ATTR_WRITE   (1U<<13U)
 #define PSECT_M_ATTR_EXEC    (1U<<14U)
@@ -67,6 +69,7 @@ struct data_attr_s {
     unsigned int      alignment;
     unsigned int      width;
     symscope_t        sc;
+    int               regnum;       // GLOBAL/EXTERNAL REGISTER number
 };
 typedef struct data_attr_s data_attr_t;
 
@@ -74,6 +77,19 @@ typedef struct data_attr_s data_attr_t;
 #define LNKTYPE_CALL        0
 #define LNKTYPE_JSB         1
 #define LNKTYPE_INTERRUPT   2
+
+// A linkage definition: its type and GLOBAL (name = register) segments
+#define LNK_K_MAXGLOBALS    12
+struct linkage_s {
+    long            type;
+    unsigned int    nglobals;
+    struct {
+        size_t      len;
+        char        name[NAME_SIZE];
+        long        reg;
+    } globals[LNK_K_MAXGLOBALS];
+};
+typedef struct linkage_s linkage_t;
 
 struct routine_attr_s {
     namereflist_t       inargs;
@@ -84,6 +100,7 @@ struct routine_attr_s {
     symscope_t          sc;
     initval_t          *ivlist;
     int                 linkage;    // LNKTYPE_xxx
+    name_t             *lnkname;    // linkage name, if given
 };
 typedef struct routine_attr_s routine_attr_t;
 
@@ -192,7 +209,8 @@ void initval_freelist(symctx_t ctx, initval_t *iv);
 unsigned int initval_size(symctx_t ctx, initval_t *ivlist);
 initval_t *preset_expr_add(symctx_t ctx, initval_t *head, void *pexp, void *exp);
 
-name_t *linkage_declare(scopectx_t scope, strdesc_t *dsc, int lnktype, textpos_t pos);
+name_t *linkage_declare(scopectx_t scope, strdesc_t *dsc, linkage_t *lnk, textpos_t pos);
 int linkage_type(name_t *np);
+long linkage_global_reg(name_t *np, strdesc_t *segname);
 
 #endif /* symbols_h__ */

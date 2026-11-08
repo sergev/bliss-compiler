@@ -880,27 +880,7 @@ gen_ch_translate (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef ne
  * needs them is turned into a varargs function at its end.
  */
 
-/*
- * entry_builder
- *
- * Builder positioned at the top of the routine's entry block,
- * before any call can change bliss_argcount.
- */
-static LLVMBuilderRef
-entry_builder (gencodectx_t gctx)
-{
-    LLVMBasicBlockRef entry = LLVMGetEntryBasicBlock(gctx->curfn->func);
-    LLVMValueRef first = LLVMGetFirstInstruction(entry);
-    LLVMBuilderRef b = LLVMCreateBuilderInContext(gctx->llvmctx);
-
-    if (first != 0) {
-        LLVMPositionBuilderBefore(b, first);
-    } else {
-        LLVMPositionBuilderAtEnd(b, entry);
-    }
-    return b;
-
-} /* entry_builder */
+#define entry_builder llvmgen_entry_builder
 
 /*
  * call_va_intrinsic

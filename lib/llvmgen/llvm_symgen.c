@@ -693,6 +693,25 @@ datasym_generator (void *vctx, name_t *np, void *p)
         LLVMSetInitializer(ld->value, LLVMConstNull(type));
         LLVMSetLinkage(ld->value, LLVMInternalLinkage);
         ld->vclass = LLVM_GLOBAL;
+    } else if ((attr->flags & (SYM_M_GREG|SYM_M_EXTREG)) != 0) {
+        // GLOBAL/EXTERNAL REGISTER: a thread-local cell per register
+        // number, shared with called routines. The declaring routine
+        // saves it on entry and restores it on exit, like a
+        // callee-saved register.
+        llvm_rtntrack_t *rt = gctx->curfn;
+        ld->vclass = LLVM_LOCAL;
+        type = gendatatype(gctx, attr, &units);
+        ld->value = llvmgen_regcell(gctx, attr->regnum);
+        ld->type = type;
+        if ((attr->flags & SYM_M_GREG) != 0 && rt->gregsave[attr->regnum] == 0) {
+            LLVMBuilderRef b = llvmgen_entry_builder(gctx);
+            rt->gregsave[attr->regnum] = LLVMBuildLoad2(b, gctx->fullwordtype, ld->value, "");
+            LLVMDisposeBuilder(b);
+        }
+        if (attr->ivlist != 0) {
+            ld->units = units;
+            ld->pending = LLVMGEN_K_PEND_INIT;
+        }
     } else {
         // Everything else is LOCAL, with an alloca, even REGISTER
         // declarations. XXX revisit later
@@ -1008,6 +1027,31 @@ llvmgen_argcount_global (gencodectx_t gctx)
     return g;
 
 } /* llvmgen_argcount_global */
+
+/*
+ * llvmgen_regcell
+ *
+ * The thread-local cell that stands for register n in GLOBAL and
+ * EXTERNAL REGISTER declarations.
+ */
+LLVMValueRef
+llvmgen_regcell (gencodectx_t gctx, int regnum)
+{
+    char name[32];
+    LLVMValueRef g;
+
+    snprintf(name, sizeof(name), "bliss_reg%d", regnum);
+    g = LLVMGetNamedGlobal(gctx->module, name);
+    if (g == 0) {
+        g = LLVMAddGlobal(gctx->module, gctx->fullwordtype, name);
+        LLVMSetInitializer(g, LLVMConstNull(gctx->fullwordtype));
+        LLVMSetLinkage(g, LLVMWeakAnyLinkage);
+        LLVMSetThreadLocal(g, 1);
+        LLVMSetThreadLocalMode(g, LLVMInitialExecTLSModel);
+    }
+    return g;
+
+} /* llvmgen_regcell */
 
 /*
  * llvmgen_rtn_make_varargs

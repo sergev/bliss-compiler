@@ -21,6 +21,7 @@
 
 #define LLVMGEN_K_PHIREFMAX     256
 #define LLVMGEN_K_MAXARGS       64
+#define LLVMGEN_K_MAXREGS       12      // GLOBAL/EXTERNAL REGISTER numbers
 
 // Branch tracking structure.  There are common patterns
 // for handling LLVM branches and phi values for loops,
@@ -64,6 +65,7 @@ struct llvm_rtntrack_s {
     LLVMValueRef             valist;    // va_list started on entry
     LLVMValueRef             argblock;  // ARGPTR block: count, args...
     LLVMValueRef             vacopy;    // va_list for reading the block
+    LLVMValueRef             gregsave[LLVMGEN_K_MAXREGS]; // GLOBAL REGISTER cells saved on entry
     int                      varargs;   // must become a varargs function
 };
 typedef struct llvm_rtntrack_s llvm_rtntrack_t;
@@ -218,6 +220,8 @@ LLVMValueRef llvmgen_rtntype_info(gencodectx_t gctx, name_t *np, LLVMTypeRef *fu
 void llvmgen_deref_push(gencodectx_t gctx, name_t *np);
 void llvmgen_args_to_locals(gencodectx_t gctx, name_t *np);
 LLVMValueRef llvmgen_argcount_global(gencodectx_t gctx);
+LLVMValueRef llvmgen_regcell(gencodectx_t gctx, int regnum);
+LLVMBuilderRef llvmgen_entry_builder(gencodectx_t gctx);
 unsigned int llvmgen_callconv(int lnktype);
 void llvmgen_rtn_make_varargs(gencodectx_t gctx, name_t *np);
 void llvmgen_block_begin(gencodectx_t gctx, scopectx_t scope);

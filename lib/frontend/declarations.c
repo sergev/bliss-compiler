@@ -1055,6 +1055,7 @@ declare_data (expr_ctx_t ctx, scopectx_t scope, lextype_t lt, decltype_t dt)
     dataclass_t dc;
     int status = 1;
     symscope_t sc;
+    int greg;
     static lextype_t delims[2] = { LEXTYPE_DELIM_SEMI, LEXTYPE_DELIM_COMMA };
 
     switch (lt) {
@@ -1090,6 +1091,8 @@ declare_data (expr_ctx_t ctx, scopectx_t scope, lextype_t lt, decltype_t dt)
           : (dt == DCL_EXTERNAL ? SYMSCOPE_EXTERNAL
              : SYMSCOPE_LOCAL));
 
+    greg = (lt == LEXTYPE_DCL_REGISTER && (dt == DCL_GLOBAL || dt == DCL_EXTERNAL));
+
     while (status != 0) {
         data_attr_t attr;
 
@@ -1103,13 +1106,33 @@ declare_data (expr_ctx_t ctx, scopectx_t scope, lextype_t lt, decltype_t dt)
         attr.flags = SYM_M_PENDING | (dt == DCL_FORWARD ? SYM_M_FORWARD : 0);
         attr.owner = owner;
         attr.sc = sc;
+        if (greg) {
+            // GLOBAL/EXTERNAL REGISTER name {= register-number} (LRM 10.8, 10.9)
+            long reg = -1;
+            attr.sc = SYMSCOPE_LOCAL;
+            attr.flags |= (dt == DCL_GLOBAL ? SYM_M_GREG : SYM_M_EXTREG);
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_OP_ASSIGN, 0, 1)) {
+                if (!expr_parse_ctce(ctx, 0, &reg)) {
+                    expr_signal(ctx, STC__EXPCTCE);
+                }
+            } else if (dt == DCL_EXTERNAL && owner != 0 &&
+                       rtnsym_attr(owner)->lnkname != 0) {
+                reg = linkage_global_reg(rtnsym_attr(owner)->lnkname, namestr);
+            }
+            if (reg < 0 || reg >= LNK_K_MAXGLOBALS) {
+                expr_signal(ctx, STC__REGNUMERR, reg);
+                reg = 0;
+            }
+            attr.regnum = (int) reg;
+        }
         np = datasym_declare(scope, namestr, &attr, pos);
         if (np == 0) {
             expr_signal(ctx, STC__INTCMPERR, "declare_data[1]");
         }
 
         if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COLON, 0, 1)) {
-            status = handle_data_attrs(ctx, scope, dt, &attr, np);
+            status = handle_data_attrs(ctx, scope, (greg && dt == DCL_GLOBAL ? DCL_NORMAL : dt),
+                                       &attr, np);
             if (!status) {
                 expr_signal(ctx, STC__SYNTAXERR);
             }
@@ -1406,6 +1429,7 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                 did1 = 1;
                 saw_lnk = 1;
                 attr->linkage = linkage_type(lexeme_ctx_get(lex));
+                attr->lnkname = lexeme_ctx_get(lex);
                 lexeme_free(expr_lexmemctx(ctx), lex);
             }
         }
@@ -1657,14 +1681,64 @@ skip_parens (parse_ctx_t pctx)
 } /* skip_parens */
 
 /*
+ * parse_linkage_globals
+ *
+ * GLOBAL (global-register-name = register-number, ...)
+ */
+static void
+parse_linkage_globals (expr_ctx_t ctx, linkage_t *ldef)
+{
+    parse_ctx_t pctx = expr_parse_ctx(ctx);
+    strdesc_t *gname;
+    textpos_t pos;
+    long reg;
+
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+        expr_signal(ctx, STC__DELIMEXP, "(");
+        return;
+    }
+    while (1) {
+        if (!parse_decl_name(pctx, &gname, &pos)) {
+            expr_signal(ctx, STC__NAMEEXP);
+            break;
+        }
+        if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_OP_ASSIGN, 0, 1)) {
+            expr_signal(ctx, STC__OPEREXP, "=");
+        }
+        if (!expr_parse_ctce(ctx, 0, &reg)) {
+            expr_signal(ctx, STC__EXPCTCE);
+            reg = 0;
+        }
+        if (reg < 0 || reg >= LNK_K_MAXGLOBALS) {
+            expr_signal(ctx, STC__REGNUMERR, reg);
+        } else if (ldef->nglobals < LNK_K_MAXGLOBALS && gname->len < NAME_SIZE) {
+            unsigned int i = ldef->nglobals++;
+            ldef->globals[i].len = gname->len;
+            memcpy(ldef->globals[i].name, gname->ptr, gname->len);
+            ldef->globals[i].reg = reg;
+        }
+        string_free(expr_strctx(ctx), gname);
+        if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
+            break;
+        }
+    }
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
+        expr_signal(ctx, STC__DELIMEXP, ")");
+        parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+    }
+
+} /* parse_linkage_globals */
+
+/*
  * LINKAGE (LRM 13.3)
  *
  * LINKAGE name = type { ( in-param,... { ; out-param,... } ) }
  *                     { : option... } {,...} ;
  *
  * CALL is the C convention; JSB is a fast convention between BLISS
- * routines. STANDARD parameter locations only; the register-usage
- * options (GLOBAL, PRESERVE, NOPRESERVE, NOTUSED) are ignored.
+ * routines. STANDARD parameter locations only. GLOBAL (name = reg, ...)
+ * names the global register segments; PRESERVE, NOPRESERVE and NOTUSED
+ * are ignored.
  */
 static int
 declare_linkage (expr_ctx_t ctx, scopectx_t scope)
@@ -1676,8 +1750,10 @@ declare_linkage (expr_ctx_t ctx, scopectx_t scope)
     lexeme_t *lex;
     lextype_t lt;
     int lnk;
+    linkage_t ldef;
 
     while (1) {
+        memset(&ldef, 0, sizeof(ldef));
         if (!parse_decl_name(pctx, &namestr, &pos)) {
             expr_signal(ctx, STC__NAMEEXP);
             parser_skip_to_delim(pctx, LEXTYPE_DELIM_SEMI);
@@ -1719,10 +1795,15 @@ declare_linkage (expr_ctx_t ctx, scopectx_t scope)
                     break;
                 }
                 lexeme_free(expr_lexmemctx(ctx), lex);
-                skip_parens(pctx);
+                if (lt == LEXTYPE_DCL_GLOBAL) {
+                    parse_linkage_globals(ctx, &ldef);
+                } else {
+                    skip_parens(pctx);
+                }
             }
         }
-        if (linkage_declare(scope, namestr, lnk, pos) == 0) {
+        ldef.type = lnk;
+        if (linkage_declare(scope, namestr, &ldef, pos) == 0) {
             expr_signal(ctx, STC__INTCMPERR, "declare_linkage");
         }
         string_free(expr_strctx(ctx), namestr);
@@ -1820,7 +1901,10 @@ declarations_init (expr_ctx_t ctx, parse_ctx_t pctx,
     switch_linkage_declare(kwdscope);
     // Predeclared linkages (LRM 13.3.5)
     for (i = 0; i < sizeof(lnkdsc)/sizeof(lnkdsc[0]); i++) {
-        linkage_declare(kwdscope, &lnkdsc[i], LNKTYPE_CALL, 0);
+        linkage_t lnk;
+        memset(&lnk, 0, sizeof(lnk));
+        lnk.type = LNKTYPE_CALL;
+        linkage_declare(kwdscope, &lnkdsc[i], &lnk, 0);
     }
 
     return dctx;

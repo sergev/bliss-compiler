@@ -409,6 +409,8 @@ usually used for in C.
 | `LOCAL` | stack (or register) | the block | this block |
 | `STACKLOCAL` | stack, never a register | the block | this block |
 | `REGISTER` | a register, if possible | the block | this block |
+| `GLOBAL REGISTER r = n` | register n | the block | also routines it calls |
+| `EXTERNAL REGISTER r {= n}` | the caller's register n | — | here |
 
 ```bliss
 OWN
@@ -429,6 +431,31 @@ BEGIN
     .calls
 END;
 ```
+
+A **global register** segment is passed to called routines in a register
+instead of as an argument (LRM 10.8, 10.9). The callee's linkage names it
+in a `GLOBAL` option, which also supplies the number for `EXTERNAL REGISTER`:
+
+```bliss
+LINKAGE uses_ctr = CALL : GLOBAL (ctr = 3);
+
+ROUTINE bump : uses_ctr NOVALUE =
+    BEGIN
+    EXTERNAL REGISTER ctr;              ! register 3, from the linkage
+    ctr = .ctr + 1
+    END;
+
+ROUTINE count =
+    BEGIN
+    GLOBAL REGISTER ctr = 3 : INITIAL (0);
+    bump (); bump ();
+    .ctr                                ! 2
+    END;
+```
+
+**blissc:** register n is a thread-local variable `bliss_reg<n>` (n is
+0 to 11), not a machine register. A routine that declares `GLOBAL
+REGISTER` saves it on entry and restores it on return.
 
 `OWN` and `GLOBAL` data start at zero unless initialized. `LOCAL` data
 start undefined unless you give `INITIAL`/`PRESET`.
@@ -1107,8 +1134,8 @@ between BLISS routines (LLVM `fastcc`). Both sides of a call must agree,
 so declare an `EXTERNAL ROUTINE` with the same linkage as its definition.
 Parameters are always `STANDARD`: `REGISTER =` locations and other linkage
 types (`INTERRUPT`, BLISS-36 `PUSHJ`, ...) are errors. The register-usage
-options `GLOBAL`, `PRESERVE`, `NOPRESERVE` and `NOTUSED` are accepted and
-ignored. `ACTUALCOUNT`, `ACTUALPARAMETER` and `ARGPTR` need a `CALL`
+options `PRESERVE`, `NOPRESERVE` and `NOTUSED` are accepted and ignored;
+`GLOBAL` names global register segments (§9). `ACTUALCOUNT`, `ACTUALPARAMETER` and `ARGPTR` need a `CALL`
 linkage.
 
 ### Condition handling

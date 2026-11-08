@@ -545,28 +545,21 @@ compiletime_deserialize (void *vctx, name_t *np, void *fh,
 
 /*
  * linkage_serialize, linkage_deserialize
- *
- * A linkage name's value is its LNKTYPE_xxx.
  */
 static int
 linkage_serialize (void *vctx, name_t *np, void *fh)
 {
-    long val = name_value_signed(np);
-    return name_serialize(np, fh, &val, sizeof(val));
+    return name_serialize(np, fh, name_extraspace(np), sizeof(linkage_t));
 
 } /* linkage_serialize */
 
 static int
 linkage_deserialize (void *vctx, name_t *np, void *fh, unsigned int count)
 {
-    long val;
     size_t len;
 
-    if (count == sizeof(val) && file_readbuf(fh, &val, count, &len) > 0 && len == count) {
-        name_value_signed_set(np, val);
-        return 1;
-    }
-    return 0;
+    return (count == sizeof(linkage_t) &&
+            file_readbuf(fh, name_extraspace(np), count, &len) > 0 && len == count);
 
 } /* linkage_deserialize */
 
@@ -574,23 +567,41 @@ linkage_deserialize (void *vctx, name_t *np, void *fh, unsigned int count)
  * linkage_declare
  */
 name_t *
-linkage_declare (scopectx_t scope, strdesc_t *dsc, int lnktype, textpos_t pos)
+linkage_declare (scopectx_t scope, strdesc_t *dsc, linkage_t *lnk, textpos_t pos)
 {
     namedef_t ndef;
-    name_t *np;
 
     memset(&ndef, 0, sizeof(ndef));
     ndef.lt = LEXTYPE_NAME_LINKAGE;
     ndef.flags = NAME_M_DECLARED;
     ndef.name = dsc->ptr;
     ndef.namelen = dsc->len;
-    np = name_declare(scope, &ndef, pos, 0, 0, 0);
-    if (np != 0) name_value_signed_set(np, lnktype);
-    return np;
+    return name_declare(scope, &ndef, pos, lnk, sizeof(linkage_t), 0);
 
 } /* linkage_declare */
 
-int linkage_type (name_t *np) { return (int) name_value_signed(np); }
+int linkage_type (name_t *np) { linkage_t *l = name_extraspace(np); return (int) l->type; }
+
+/*
+ * linkage_global_reg
+ *
+ * Register number of a GLOBAL segment of the linkage, or -1.
+ */
+long
+linkage_global_reg (name_t *np, strdesc_t *segname)
+{
+    linkage_t *l = name_extraspace(np);
+    unsigned int i;
+
+    for (i = 0; i < l->nglobals; i++) {
+        if (l->globals[i].len == segname->len &&
+            memcmp(l->globals[i].name, segname->ptr, segname->len) == 0) {
+            return l->globals[i].reg;
+        }
+    }
+    return -1;
+
+} /* linkage_global_reg */
 
 /*
  * bind_literal
@@ -1017,7 +1028,7 @@ symbols_init (expr_ctx_t ctx)
     machinedef_t *mach = expr_machinedef(ctx);
     static nametype_vectors_t compiletime_vec = { 0, 0, 0, 0,
             compiletime_serialize, compiletime_deserialize };
-    static nametype_vectors_t linkage_vec = { 0, 0, 0, 0,
+    static nametype_vectors_t linkage_vec = { sizeof(linkage_t), 0, 0, 0,
             linkage_serialize, linkage_deserialize };
 
     memset(symctx, 0, sizeof(struct symctx_s));

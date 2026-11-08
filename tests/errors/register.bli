@@ -1,0 +1,19 @@
+MODULE test =
+BEGIN
+
+! GLOBAL REGISTER needs a register number; EXTERNAL REGISTER takes it
+! from the routine's linkage if not given (LRM 10.8, 10.9).
+
+ROUTINE r =
+    BEGIN
+    GLOBAL REGISTER a;
+!! cerr %BLISS-E-REGNUMERR,
+    EXTERNAL REGISTER b;
+!! cerr %BLISS-E-REGNUMERR,
+    GLOBAL REGISTER c = 12;
+!! cerr %BLISS-E-REGNUMERR,
+    0
+    END;
+
+END
+ELUDOM

@@ -86,6 +86,29 @@ llvmgen_btrack_finalize (gencodectx_t gctx, llvm_btrack_t *bt, LLVMTypeRef neede
 } /* llvmgen_btrack_finalize */
 
 /*
+ * llvmgen_entry_builder
+ *
+ * Builder positioned at the top of the current routine's entry
+ * block, before any call: for loading bliss_argcount and saving
+ * GLOBAL REGISTER cells.
+ */
+LLVMBuilderRef
+llvmgen_entry_builder (gencodectx_t gctx)
+{
+    LLVMBasicBlockRef entry = LLVMGetEntryBasicBlock(gctx->curfn->func);
+    LLVMValueRef first = LLVMGetFirstInstruction(entry);
+    LLVMBuilderRef b = LLVMCreateBuilderInContext(gctx->llvmctx);
+
+    if (first != 0) {
+        LLVMPositionBuilderBefore(b, first);
+    } else {
+        LLVMPositionBuilderAtEnd(b, entry);
+    }
+    return b;
+
+} /* llvmgen_entry_builder */
+
+/*
  * gencode_routine_begin
  *
  * Sets up the tracking structure for generating code in a routine
@@ -148,12 +171,19 @@ gencode_routine_end (gencodectx_t gctx, name_t *np)
     llvm_rtntrack_t *rt = gctx->curfn;
     LLVMValueRef thisfn = rt->func;
     LLVMValueRef val;
+    unsigned int i;
 
     LLVMPositionBuilderAtEnd(rt->builder, LLVMGetEntryBasicBlock(thisfn));
     val = llvmgen_expression(gctx, rtnexpr, (novalue ? 0 : gctx->fullwordtype));
     llvmgen_btrack_update(gctx, rt->btrack[LLVMGEN_K_BT_FUNC], (novalue ? 0 : val));
     val = llvmgen_btrack_finalize(gctx, rt->btrack[LLVMGEN_K_BT_FUNC],
                                   (novalue ? 0 : gctx->fullwordtype));
+    // Restore the GLOBAL REGISTER cells this routine declared
+    for (i = 0; i < LLVMGEN_K_MAXREGS; i++) {
+        if (rt->gregsave[i] != 0) {
+            LLVMBuildStore(rt->builder, rt->gregsave[i], llvmgen_regcell(gctx, (int) i));
+        }
+    }
     if (novalue) {
         LLVMBuildRetVoid(rt->builder);
     } else {

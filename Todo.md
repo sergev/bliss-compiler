@@ -3,17 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T7. GLOBAL REGISTER and EXTERNAL REGISTER
-
-Variables pinned to a named machine register.
-
-- Parse in `declarations.c`; the register number maps to an x86 register
-  name in `llvm_machines.c`.
-- Back end: `llvm.read_register` / `llvm.write_register` intrinsics, or
-  reject registers LLVM can't reserve (only rsp/rbp-like are allowed by
-  LLVM on x86; check before committing to this task).
-- If LLVM cannot support it, report a clear error instead of EXPREXP.
-
 ## T8. Condition handling: ENABLE, SIGNAL, SIGNAL_STOP, SETUNWIND
 
 The largest task; VMS-style handlers.
