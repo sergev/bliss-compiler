@@ -30,19 +30,19 @@ gcc 16 and LLVM 21.
 
 ## Building the compiler
 
-First, clone [the repository](https://github.com/sergev/bliss-compiler.git).
+```
+git clone https://github.com/sergev/bliss-compiler.git
+cd bliss-compiler
+make
+```
 
-1. Create a directory for the build.
-2. Run `cmake <path-to-sources>` to generate the build files.
-   CMake will attempt to locate a usable copy of LLVM automatically,
-   but you can specify -DLLVM_CONFIG=<path-to-llvm-config> to force
-   it to use a particular installation of LLVM.
-3. Run `make` to build the compiler.
+Run `make test` to run the tests, and `make install` to install
+**blissc** into `~/.local/bin` (or `/usr/local/bin`).
 
 Running the compiler
 --------------------
 
-The build will produce a program called **blissc** in your build
+The build will produce a program called **blissc** in the `build`
 directory.  Run `./blissc --help` for a description of the arguments
 and options.
 
