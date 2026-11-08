@@ -31,6 +31,7 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
     compout = []
     comperrs = []
     runout = []
+    status = None
     failures = 0
     cases = 0
     with open(testfile, 'r') as infile:
@@ -42,6 +43,12 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
             compout.append(result.strip())
         elif cmd == 'cerr':
             comperrs.append(result.strip())
+        elif cmd == 'out':
+            cases = cases + 1
+            runout.append(result.strip())
+        elif cmd == 'status':
+            cases = cases + 1
+            status = int(result)
         else:
             try:
                 caseno = int(cmd)
@@ -101,14 +108,18 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
     if not quiet and failures == 0:
         print("  compilation phase passed")
 
+    # A test with "out"/"status" lines is a standalone program (MAIN=)
+    standalone = status is not None or any(not s.startswith('TEST ') for s in runout)
     try:
-        subprocess.run([cc, '-o', barename, testharness, barename + '.o'], check=True)
+        subprocess.run([cc, '-o', barename] + ([] if standalone else [testharness]) +
+                       [barename + '.o'], check=True)
     except subprocess.CalledProcessError as e:
         print(("  FAIL: linking {} into test harness failed" +
               "\n        {}").format(barename + '.o', '\n        '.join([line for line in e.stderr.split('\n')])))
         return cases, 0, cases
     try:
-        dorun = subprocess.run(['./' + barename], capture_output=True, encoding='utf-8', check=True)
+        dorun = subprocess.run(['./' + barename], capture_output=True, encoding='utf-8',
+                               check=not standalone)
     except subprocess.CalledProcessError as e:
         print(("  FAIL: test harness failed to run for {}" +
               "\n        {}").format(testfile, '\n        '.join([line for line in e.stderr.split('\n')])))
@@ -116,6 +127,13 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
 
     o = dorun.stdout.split('\n')
     passes = 0
+    if status is not None:
+        if dorun.returncode == status:
+            passes = passes + 1
+        else:
+            failures = failures + 1
+            if not quiet:
+                print("   FAIL: wanted exit status {}, actual {}".format(status, dorun.returncode))
     for s in runout:
         if s in o:
             o.remove(s)

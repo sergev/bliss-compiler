@@ -1,0 +1,22 @@
+MODULE mainrtn (MAIN = start) =
+BEGIN
+
+! MAIN switch (LRM 19.2): program execution begins with a call on
+! the named routine; blissc makes its value the exit status.
+
+EXTERNAL ROUTINE
+    %NAME('printf');
+
+ROUTINE fact (n) =
+    IF .n LEQ 1 THEN 1 ELSE .n * fact (.n - 1);
+
+ROUTINE start =
+BEGIN
+    %NAME('printf') (UPLIT (%ASCIZ %STRING ('10! = %ld', %CHAR (10))), fact (10));
+    3
+END;
+
+END
+ELUDOM
+!! out 10! = 3628800
+!! status 3

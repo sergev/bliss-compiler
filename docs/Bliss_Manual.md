@@ -62,7 +62,7 @@ implements BLISS-M, a BLISS-32-like dialect for modern targets. (LRM 1)
 ## 2. A first program
 
 ```bliss
-MODULE hello =
+MODULE hello (MAIN = start) =   ! the program begins by calling start
 BEGIN
 
 EXTERNAL ROUTINE
@@ -71,11 +71,11 @@ EXTERNAL ROUTINE
 ROUTINE fact (n) =
     IF .n LEQ 1 THEN 1 ELSE .n * fact (.n - 1);
 
-GLOBAL ROUTINE %NAME('main') =
+ROUTINE start =
 BEGIN
     %NAME('printf') (UPLIT (%ASCIZ %STRING ('10! = %ld', %CHAR (10))),
                      fact (10));
-    0                           ! value of the block = exit status
+    0                           ! value of start = exit status
 END;
 
 END
@@ -93,13 +93,12 @@ cc -o hello hello.o
 Points to notice:
 
 - A module is `MODULE name = BEGIN ... END ELUDOM` (`ELUDOM` is `MODULE`
-  backwards).
+  backwards). `MAIN = start` names the routine where the program starts.
+  **blissc** turns it into a C `main` that calls `start` and returns its
+  value as the exit status.
 - `.n` fetches the value of parameter `n`.
 - The routine body is one expression; its value is the result.
 - `!` starts a comment.
-
-The LRM's own example (LRM 1.8) uses `MODULE E1 (MAIN = CTRL)` to name the
-program's entry routine; that is how it worked on VMS.
 
 ## 3. Lexical rules
 
@@ -950,7 +949,7 @@ CH$EQL (2, CH$PTR (UPLIT ('ab')), 4, CH$PTR (UPLIT ('ab  ')), %C' ')   ! 1
 A module is the unit of compilation:
 
 ```bliss
-MODULE mymod (IDENT = 'V1.0', MAIN = start, ADDRESSING_MODE (...)) =
+MODULE mymod (IDENT = 'V1.0', MAIN = start) =
 BEGIN
     ! declarations only: no executable code at module level
 END
@@ -962,14 +961,15 @@ Common module switches:
 | Switch | Meaning |
 |---|---|
 | `IDENT = 'string'` | version string in the object file |
-| `MAIN = routine` | program entry point (VMS) |
+| `MAIN = routine` | program entry point; once per program |
 | `LANGUAGE (BLISS32, ...)` | dialects the module is meant for |
 | `ADDRESSING_MODE`, `ENVIRONMENT`, `LINKAGE` | target settings |
 | `LIST (...)`, `OPTIMIZE`, `OPTLEVEL = n` | compiler output and optimization |
 
-**blissc:** `MAIN` does not create a C `main`; name your routine
-`%NAME('main')` instead. `LANGUAGE`, `ADDRESSING_MODE` and `ENVIRONMENT` are
-accepted and ignored.
+**blissc:** `MAIN = r` generates a C `main` that calls `r` (passing 0 for
+any parameters) and returns its value as the exit status; 0 if `r` is
+`NOVALUE`. `MAIN` is a reserved word in blissc. `LANGUAGE`,
+`ADDRESSING_MODE` and `ENVIRONMENT` are accepted and ignored.
 
 A program is several modules linked together; they share data and routines
 through `GLOBAL` and `EXTERNAL` declarations.

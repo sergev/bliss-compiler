@@ -296,8 +296,6 @@ optlevel_handler (parse_ctx_t pctx, void *vctx, lextype_t dcltype, lexeme_t *swl
  * This function creates the module in LLVM, sets up the function
  * pass manager, and, if optimization is enabled, sets up the
  * optimization passes.
- *
- * XXX Needs further work.  MAIN is not handled, for instance.
  */
 int
 gencode_module_begin (gencodectx_t gctx, name_t *modnp)
@@ -352,6 +350,55 @@ gencode_module_begin (gencodectx_t gctx, name_t *modnp)
 } /* gencode_module_begin */
 
 /*
+ * gen_main
+ *
+ * For MAIN=routine, emit a C main() that calls the routine
+ * (with zero arguments for any formals) and returns its value.
+ */
+static void
+gen_main (gencodectx_t gctx, name_t *modnp)
+{
+    strdesc_t *str = modsym_main(modnp);
+    char name[NAME_SIZE];
+    LLVMValueRef rtn, mainfn, val;
+    LLVMTypeRef fntype, rettype, i32type, params[2], ptypes[64];
+    LLVMValueRef args[64];
+    LLVMBuilderRef builder;
+    unsigned int i, nargs;
+
+    if (str == 0 || str->len >= sizeof(name)) return;
+    memcpy(name, str->ptr, str->len);
+    name[str->len] = '\0';
+    if (strcmp(name, "main") == 0) return;
+    rtn = LLVMGetNamedFunction(gctx->module, name);
+    if (rtn == 0) return;   // reported by declare_module
+    if (LLVMGetNamedFunction(gctx->module, "main") != 0) return;
+
+    fntype = LLVMGlobalGetValueType(rtn);
+    nargs = LLVMCountParamTypes(fntype);
+    if (nargs > sizeof(args)/sizeof(args[0])) return;
+    LLVMGetParamTypes(fntype, ptypes);
+    for (i = 0; i < nargs; i++) args[i] = LLVMConstNull(ptypes[i]);
+
+    i32type = LLVMInt32TypeInContext(gctx->llvmctx);
+    params[0] = i32type;
+    params[1] = LLVMPointerTypeInContext(gctx->llvmctx, 0);
+    mainfn = LLVMAddFunction(gctx->module, "main", LLVMFunctionType(i32type, params, 2, 0));
+    builder = LLVMCreateBuilderInContext(gctx->llvmctx);
+    LLVMPositionBuilderAtEnd(builder, LLVMAppendBasicBlockInContext(gctx->llvmctx, mainfn, "entry"));
+    val = LLVMBuildCall2(builder, fntype, rtn, args, nargs, "");
+    rettype = LLVMGetReturnType(fntype);
+    if (LLVMGetTypeKind(rettype) == LLVMIntegerTypeKind) {
+        val = LLVMBuildIntCast2(builder, val, i32type, 1, "");
+    } else {
+        val = LLVMConstNull(i32type);
+    }
+    LLVMBuildRet(builder, val);
+    LLVMDisposeBuilder(builder);
+
+} /* gen_main */
+
+/*
  * gencode_module_end
  *
  * Performs the final verification on a module, generates the
@@ -363,6 +410,8 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
 {
     char *err;
     int broken;
+
+    gen_main(gctx, np);
 
     // A module left broken by earlier errors can't be optimized or emitted
     err = 0;
