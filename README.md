@@ -13,10 +13,15 @@ language with an extensive lexical processing (macro) facility.  See the
 
 ## Current Status
 
-Work in progress.   The front-end is mostly complete, with a fully
-functioning parser and macro facility.  Back-end support is currently
-limited to LLVM and x86 CPUs (32- or 64-bit), with a limited amount
-of machine-specific support.
+The compiler implements the BLISS language as described in the
+[BLISS Language Reference Manual](docs/bliss-language-reference-manual.pdf),
+including the macro facility, precompiled libraries, condition handling
+(with the run-time library `libblissrt.a`) and F, D, G and H floating-point.
+See [docs/Bliss_Manual.md](docs/Bliss_Manual.md) for a short guide to the language.
+
+The back end uses LLVM and supports x86 CPUs (32- or 64-bit) only.
+Linkages that cannot be expressed on x86, such as `PUSHJ` and `REGISTER`
+parameter locations, are reported as errors.
 
 ## Prerequisites
 
