@@ -10,7 +10,7 @@ BLISS-M: a cross-compiler for the BLISS systems-programming language (C, with on
 
 ```
 make            # configure into build/ (RelWithDebInfo) on first run, then build
-make debug; make   # reconfigure as Debug (-Werror is on in Debug)
+make debug; make   # reconfigure as Debug (all builds use -Werror -Wshadow)
 make clean      # rm -rf build
 ```
 

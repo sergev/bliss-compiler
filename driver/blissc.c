@@ -245,8 +245,8 @@ int
 main (int argc, char *argv[])
 {
     jmp_buf retenv;
-    blissc_driverctx_t cctx = 0;
-    int status = 0;
+    blissc_driverctx_t volatile cctx = 0;
+    volatile int status = 0;
 
     if (setjmp(retenv)) {
         status = 1;

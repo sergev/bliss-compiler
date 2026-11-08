@@ -10,7 +10,7 @@ find_package(Python3 COMPONENTS Interpreter)
 include_directories(${blissc_BINARY_DIR}/include ${CMAKE_SOURCE_DIR}/include)
 
 if(NOT MSVC)
-  add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wpedantic $<$<CONFIG:DEBUG>:-Werror>)
+  add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wpedantic -Werror -Wshadow)
 endif()
 
 add_library(libdriver STATIC lib/driver/driver.c)
@@ -41,6 +41,7 @@ add_library(libllvmgen STATIC
   lib/llvmgen/llvm_symgen.c
   lib/llvmgen/llvm_builtins_x86.c
   lib/llvmgen/llvm_helper.cpp)
+target_include_directories(libllvmgen SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_compile_options(libllvmgen
   PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-pragmas ${LLVM_CXXFLAGS}>
   PRIVATE $<$<COMPILE_LANGUAGE:C>:${LLVM_CFLAGS}>)

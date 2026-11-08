@@ -709,7 +709,6 @@ parse_fields (expr_ctx_t ctx, scopectx_t scope, namereflist_t *fldset)
     namedef_t ndef;
     lextype_t delims[2] = { LEXTYPE_DELIM_COMMA, LEXTYPE_DELIM_RBRACK };
     int which;
-    static strdesc_t zero = STRDEF("0");
 
     while (1) {
         if (!parse_decl_name(pctx, &fldname, &fpos)) {
