@@ -41,6 +41,9 @@ void switches_ignored_declare(scopectx_t scope);
 #define SWITCH_K_COUNT    7
 void switch_record(parse_ctx_t pctx, int idx, int on);
 int switch_test(scopectx_t scope, strdesc_t *name);
+void switch_linkage_set(parse_ctx_t pctx, int lnktype);
+int switch_linkage(scopectx_t scope);
+void switch_linkage_declare(scopectx_t scope);
 int parse_switches(parse_ctx_t pctx, lextype_t decltype, lextype_t terminator);
 
 #endif /* switches_h__ */

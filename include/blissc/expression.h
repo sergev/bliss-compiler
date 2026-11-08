@@ -130,7 +130,7 @@ struct expr_loopid_s {
 };
 struct expr_rtncall_s {
     struct expr_node_s  *rtn;
-    // need linkage XXX
+    int                 linkage;    // LNKTYPE_xxx, or -1: the routine's own
     exprseq_t           inargs;
     exprseq_t           outargs;
 };
@@ -320,6 +320,9 @@ siu exprseq_t *expr_rtn_inargs(expr_node_t *node) {
     return &node->data.rcdata.inargs; }
 siu exprseq_t *expr_rtn_outargs(expr_node_t *node) {
     return &node->data.rcdata.outargs; }
+siu int expr_rtn_linkage(expr_node_t *node) { return node->data.rcdata.linkage; }
+siu void expr_rtn_linkage_set(expr_node_t *node, int lnk) {
+    node->data.rcdata.linkage = lnk; }
 
 // EXECFUN
 siu name_t *expr_func_name(expr_node_t *node) { return node->data.fdata.funcname; }

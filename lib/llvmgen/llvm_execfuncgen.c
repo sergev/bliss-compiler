@@ -931,6 +931,10 @@ in_routine (gencodectx_t gctx, expr_node_t *exp)
         expr_signal(gctx->ectx, STC__LNKFNRTN, name_string(expr_func_name(exp)));
         return 0;
     }
+    if (LLVMGetFunctionCallConv(gctx->curfn->func) != LLVMCCallConv) {
+        expr_signal(gctx->ectx, STC__LNKFNLNK, name_string(expr_func_name(exp)));
+        return 0;
+    }
     return 1;
 
 } /* in_routine */

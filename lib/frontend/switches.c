@@ -26,6 +26,7 @@
  *--
  */
 #include "blissc/switches.h"
+#include "blissc/symbols.h"
 
 struct switch_special_s {
     switch_parse_handler_fn handler;
@@ -275,6 +276,66 @@ switch_test (scopectx_t scope, strdesc_t *name)
     return -1;
 
 } /* switch_test */
+
+/*
+ * Default linkage (LINKAGE switch), kept above the on-off bits
+ */
+#define SWITCH_V_LINKAGE 8
+#define SWITCH_M_LINKAGE (3U<<SWITCH_V_LINKAGE)
+
+void
+switch_linkage_set (parse_ctx_t pctx, int lnktype)
+{
+    scopectx_t scope = parser_scope_get(pctx);
+    scope_switches_set(scope, (scope_switches(scope) & ~SWITCH_M_LINKAGE) |
+                       ((unsigned int) lnktype << SWITCH_V_LINKAGE));
+}
+
+int
+switch_linkage (scopectx_t scope)
+{
+    return (int) ((scope_switches(scope) & SWITCH_M_LINKAGE) >> SWITCH_V_LINKAGE);
+}
+
+/*
+ * linkage_switch
+ *
+ * LINKAGE (linkage-name): the default linkage.
+ */
+static int
+linkage_switch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, lexeme_t *swlex)
+{
+    lexeme_t *lex;
+
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+        log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__DELIMEXP, "(");
+        return 1;
+    }
+    if (parser_expect(pctx, QL_NORMAL, LEXTYPE_NAME_LINKAGE, &lex, 1)) {
+        switch_linkage_set(pctx, linkage_type(lexeme_ctx_get(lex)));
+        lexeme_free(parser_lexmemctx(pctx), lex);
+    } else {
+        log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__LNKNAMEXP);
+    }
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
+        log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__DELIMEXP, ")");
+        parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+    }
+    return 1;
+
+} /* linkage_switch */
+
+/*
+ * switch_linkage_declare
+ *
+ * Hooks up the LINKAGE switch; the LINKAGE keyword must exist.
+ */
+void
+switch_linkage_declare (scopectx_t scope)
+{
+    switch_special_declare(scope, LEXTYPE_DCL_LINKAGE, linkage_switch, 0);
+
+} /* switch_linkage_declare */
 
 /*
  * record_toggle

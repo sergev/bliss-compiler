@@ -218,6 +218,7 @@ LLVMValueRef llvmgen_rtntype_info(gencodectx_t gctx, name_t *np, LLVMTypeRef *fu
 void llvmgen_deref_push(gencodectx_t gctx, name_t *np);
 void llvmgen_args_to_locals(gencodectx_t gctx, name_t *np);
 LLVMValueRef llvmgen_argcount_global(gencodectx_t gctx);
+unsigned int llvmgen_callconv(int lnktype);
 void llvmgen_rtn_make_varargs(gencodectx_t gctx, name_t *np);
 void llvmgen_block_begin(gencodectx_t gctx, scopectx_t scope);
 void llvmgen_deref_pop(gencodectx_t gctx, name_t *np);

@@ -675,7 +675,7 @@ datasym_generator (void *vctx, name_t *np, void *p)
         if (attr->owner != 0) {
             LLVMSetSection(ld->value, name_azstring(attr->owner));
         }
-        if (name_globalname(namectx, np) == 0) {
+        if (name_globalname(namectx, np) == 0 && attr->sc != SYMSCOPE_EXTERNAL) {
             LLVMSetLinkage(ld->value, LLVMInternalLinkage);
         } else if ((attr->flags & SYM_M_WEAK) != 0) {
             LLVMSetLinkage(ld->value, attr->sc == SYMSCOPE_EXTERNAL
@@ -776,12 +776,17 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     if (extantfn != 0 && proto_only) {
         return 1;
     }
+    if (extantfn != 0 && !LLVMIsDeclaration(extantfn)) {
+        extantfn = 0;   // another routine of that name (nested): LLVM renames ours
+    }
     lr->returntype = ((attr->flags & SYM_M_NOVALUE) == 0 ?
                       LLVMIntTypeInContext(gctx->llvmctx, machine_scalar_bits(gctx->mach)) :
                       LLVMVoidTypeInContext(gctx->llvmctx));
     if (proto_only) {
-        lr->type = LLVMFunctionType(lr->returntype, 0, 0, 1);
+        // fastcc (JSB) cannot be varargs; calls give the real argument types
+        lr->type = LLVMFunctionType(lr->returntype, 0, 0, attr->linkage != LNKTYPE_JSB);
         lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
+        LLVMSetFunctionCallConv(lr->func, llvmgen_callconv(attr->linkage));
         if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(lr->func, LLVMExternalWeakLinkage);
         return 1;
     }
@@ -824,6 +829,7 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
         LLVMSetValueName(extantfn, "$$function.for.replacement");
     }
     lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
+    LLVMSetFunctionCallConv(lr->func, llvmgen_callconv(attr->linkage));
     if (extantfn != 0) {
         LLVMReplaceAllUsesWith(extantfn, lr->func);
         LLVMDeleteFunction(extantfn);
@@ -904,6 +910,7 @@ llvmgen_segaddress (gencodectx_t gctx, name_t *np, llvm_stgclass_t *segclassp,
 
     if (ntype == LEXTYPE_NAME_ROUTINE) {
         llvm_rtnsym_t *lr = sym_genspace(np);
+        if (lr->type == 0) rtnsym_generator(gctx, np, lr);     // e.g. from a library
         if (segclassp != 0) *segclassp = LLVM_GLOBAL;
         if (flagsp != 0) *flagsp = machine_addr_signed(gctx->mach) ? LLVMGEN_M_SEG_SIGNEXT : 0;
         if (llvm_type != 0) *llvm_type = lr->type;
@@ -912,6 +919,9 @@ llvmgen_segaddress (gencodectx_t gctx, name_t *np, llvm_stgclass_t *segclassp,
     if (ntype == LEXTYPE_NAME_DATA) {
         llvm_datasym_t *ld = sym_genspace(np);
         LLVMValueRef val;
+        if (ld->value == 0 && ld->type == 0 && gctx->module != 0) {
+            datasym_generator(gctx, np, ld);    // e.g. from a library
+        }
         if (segclassp != 0) *segclassp = ld->vclass;
         if (flagsp != 0) *flagsp = ld->flags;
         if (llvm_type != 0) *llvm_type = ld->type;
@@ -965,6 +975,18 @@ llvmgen_args_to_locals (gencodectx_t gctx, name_t *np)
 } /* llvmgen_args_to_locals */
 
 /*
+ * llvmgen_callconv
+ *
+ * LLVM calling convention for a BLISS linkage type.
+ */
+unsigned int
+llvmgen_callconv (int lnktype)
+{
+    return (lnktype == LNKTYPE_JSB ? LLVMFastCallConv : LLVMCCallConv);
+
+} /* llvmgen_callconv */
+
+/*
  * llvmgen_argcount_global
  *
  * The thread-local cell in which a caller passes the number of
@@ -1009,6 +1031,7 @@ llvmgen_rtn_make_varargs (gencodectx_t gctx, name_t *np)
     LLVMSetValueName(oldfn, "$$function.for.replacement");
     newfn = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
     LLVMSetLinkage(newfn, LLVMGetLinkage(oldfn));
+    LLVMSetFunctionCallConv(newfn, LLVMGetFunctionCallConv(oldfn));
     sect = LLVMGetSection(oldfn);
     if (sect != 0 && *sect != '\0') LLVMSetSection(newfn, sect);
     for (i = 0; i < n; i++) {
@@ -1040,6 +1063,9 @@ llvmgen_rtntype_info (gencodectx_t gctx, name_t *np, LLVMTypeRef *func_type, LLV
 
     if (ntype == LEXTYPE_NAME_ROUTINE) {
         llvm_rtnsym_t *lr = sym_genspace(np);
+        if (lr->type == 0) {
+            rtnsym_generator(gctx, np, lr);     // e.g. from a library
+        }
         if (func_type != 0) *func_type = lr->type;
         if (return_type != 0) *return_type = lr->returntype;
         return lr->func;

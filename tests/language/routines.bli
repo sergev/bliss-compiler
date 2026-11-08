@@ -3,7 +3,8 @@ BEGIN
 
 ! Routines: parameters, recursion, NOVALUE, RETURN, REF arguments,
 ! routine addresses, nested routines, FORWARD, BIND ROUTINE,
-! ACTUALCOUNT, ACTUALPARAMETER, ARGPTR (LRM 13.6).
+! ACTUALCOUNT, ACTUALPARAMETER, ARGPTR (LRM 13.6), LINKAGE (LRM 13.3),
+! general routine calls (LRM 12.2).
 
 LIBRARY 'testharness.lib';
 
@@ -148,11 +149,42 @@ GLOBAL ROUTINE test_average =
 EXTERNAL ROUTINE
     test_call_average;
 
-test_setup(numcases=19);
+! JSB is a fast linkage between BLISS routines; register-usage
+! options are accepted and ignored.
+LINKAGE
+    fast = JSB,
+    std2 = CALL (STANDARD, STANDARD) : PRESERVE (2, 3) NOPRESERVE (1),
+    nouse = JSB : NOTUSED (4, 5);
+
+FORWARD ROUTINE
+    j_even : fast;
+
+ROUTINE j_odd (n) : fast =
+    IF .n EQL 0 THEN 0 ELSE j_even (.n - 1);
+
+ROUTINE j_even (n) : fast =
+    IF .n EQL 0 THEN 1 ELSE j_odd (.n - 1);
+
+ROUTINE add2 (a, b) : std2 = .a + .b;
+
+ROUTINE triple (a) : nouse = 3 * .a;
+
+! Declared EXTERNAL with this linkage in testharness.lib
+GLOBAL ROUTINE test_jsb_twice (a) : test_jsb = 2 * .a;
+
+! SWITCHES LINKAGE sets the default for the rest of the block
+ROUTINE jsb_default =
+    BEGIN
+    SWITCHES LINKAGE (fast);
+    ROUTINE inner (a) = .a + 1;
+    inner (41)
+    END;
+
+test_setup(numcases=21);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 19 OF
+    CASE .caseno FROM 1 TO 21 OF
     SET
         [1] : test_output(.caseno, 'fact=%ld,%ld', fact(1), fact(12));
 !! 1 fact=1,479001600
@@ -219,6 +251,16 @@ BEGIN
 !! 18 actual=2,6,8,1,0,3798
         [19] : test_output(.caseno, 'fromc=%ld', test_call_average ());
 !! 19 fromc=60
+        [20] : BEGIN
+            LOCAL l, t;
+            l = add2;
+            t = triple;
+            test_output(.caseno, 'linkage=%ld,%ld,%ld,%ld,%ld,%ld', j_even (10), j_odd (10),
+                        BLISS (.l, 3, 4), fast (.t, 5), (.l) (1, 2), jsb_default ());
+        END;
+!! 20 linkage=1,0,7,15,3,42
+        [21] : test_output(.caseno, 'library=%ld,%ld', test_jsb_twice (21), .test_extdata2);
+!! 21 library=42,99
     TES;
 END;
 

@@ -1076,23 +1076,49 @@ blissc does not have them.
 
 (LRM 13, 17)
 
-These were tied to DEC operating systems.
+### Linkages
 
-- **LINKAGE** declarations describe calling conventions: which registers
-  hold which parameters, which registers are preserved, and so on.
-- **ENABLE** names a handler routine for a block. `SIGNAL (code, ...)`
-  raises a condition; the handler may continue, resignal, or unwind the
-  stack (`SETUNWIND`). `SIGNAL_STOP` raises a fatal condition. This is
-  like exceptions, built on the VMS condition-handling mechanism.
+A **linkage** is a calling convention. A `LINKAGE` declaration names one;
+the name is then a routine attribute:
+
+```bliss
+LINKAGE
+    fast = JSB,                             ! linkage type JSB
+    std2 = CALL (STANDARD, STANDARD) : PRESERVE (2, 3);
+
+FORWARD ROUTINE is_even : fast;
+ROUTINE is_odd (n) : fast = IF .n EQL 0 THEN 0 ELSE is_even (.n - 1);
+EXTERNAL ROUTINE helper : fast;
+```
+
+The predeclared linkages `BLISS`, `FORTRAN`, `FORTRAN_SUB` and
+`FORTRAN_FUNC` are all `CALL`. `SWITCHES LINKAGE (fast);` (or the module
+switch `LINKAGE (name)`) sets the default linkage for routines declared
+later in the block and for computed calls.
 
 A **general routine call** names the linkage explicitly and takes the
 routine address as its first argument: `BLISS (.l, 0)` calls the routine
 whose address is in `l` (LRM 12.2, UM 5.2.5). With the default linkage,
 `(.l) (0)` does the same.
 
-**blissc:** user `LINKAGE` declarations, general routine calls, `ENABLE`
-and `SIGNAL` are not implemented. Routines use the platform C calling
-convention, so BLISS and C code can call each other directly.
+**blissc:** `CALL` is the platform C calling convention, so BLISS and C
+code can call each other directly; `JSB` is a faster convention for calls
+between BLISS routines (LLVM `fastcc`). Both sides of a call must agree,
+so declare an `EXTERNAL ROUTINE` with the same linkage as its definition.
+Parameters are always `STANDARD`: `REGISTER =` locations and other linkage
+types (`INTERRUPT`, BLISS-36 `PUSHJ`, ...) are errors. The register-usage
+options `GLOBAL`, `PRESERVE`, `NOPRESERVE` and `NOTUSED` are accepted and
+ignored. `ACTUALCOUNT`, `ACTUALPARAMETER` and `ARGPTR` need a `CALL`
+linkage.
+
+### Condition handling
+
+- **ENABLE** names a handler routine for a block. `SIGNAL (code, ...)`
+  raises a condition; the handler may continue, resignal, or unwind the
+  stack (`SETUNWIND`). `SIGNAL_STOP` raises a fatal condition. This is
+  like exceptions, built on the VMS condition-handling mechanism.
+
+**blissc:** `ENABLE` and `SIGNAL` are not implemented.
 
 ## 22. Pitfalls for C programmers
 

@@ -26,6 +26,7 @@
 #include "blissc/gencode.h"
 #include "blissc/execfuncs.h"
 #include "blissc/declarations.h"
+#include "blissc/switches.h"
 
 #undef DOEXPTYPE
 #define DOEXPTYPE(t_) "EXPTYPE_" #t_,
@@ -603,6 +604,37 @@ parse_plit (expr_ctx_t ctx, lextype_t curlt, lexeme_t *lex)
 } /* parse_plit */
 
 /*
+ * parse_general_call
+ *
+ * General routine call: linkage-name (address {, actual...})
+ * (LRM 12.2).
+ */
+static expr_node_t *
+parse_general_call (expr_ctx_t ctx, lextype_t lt, lexeme_t *lex)
+{
+    parse_ctx_t pctx = ctx->pctx;
+    int lnk = linkage_type(lexeme_ctx_get(lex));
+    expr_node_t *addr, *call;
+
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+        expr_signal(ctx, STC__DELIMEXP, "(");
+        return 0;
+    }
+    if (!expr_parse_expr(ctx, &addr)) {
+        expr_signal(ctx, STC__EXPREXP);
+        parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+        return 0;
+    }
+    parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1);
+    call = expr_parse_arglist(ctx, addr);
+    if (call != 0) {
+        expr_rtn_linkage_set(call, lnk);
+    }
+    return call;
+
+} /* parse_general_call */
+
+/*
  * expr_dispatch_register
  *
  * Registers a handler for a NAME lextype or an expression keyword
@@ -678,6 +710,7 @@ expr_init (strctx_t strctx, parse_ctx_t pctx, scopectx_t kwdscope)
     expr_dispatch_register(ectx, LEXTYPE_KWD_PLIT, parse_plit);
     expr_dispatch_register(ectx, LEXTYPE_KWD_UPLIT, parse_plit);
     expr_dispatch_register(ectx, LEXTYPE_KWD_CODECOMMENT, parse_codecomment);
+    expr_dispatch_register(ectx, LEXTYPE_NAME_LINKAGE, parse_general_call);
     parser_lexfunc_register(pctx, ectx, LEXTYPE_LXF_CTCE, parse_xTCE);
     parser_lexfunc_register(pctx, ectx, LEXTYPE_LXF_LTCE, parse_xTCE);
     parser_lexfunc_register(pctx, ectx, LEXTYPE_LXF_CHAR, parse_CHAR);
@@ -1088,6 +1121,13 @@ expr_parse_arglist (expr_ctx_t ctx, expr_node_t *rtn)
     expr_rtnaddr_set(exp, rtn);
     exprseq_append(expr_rtn_inargs(exp), &inargs);
     exprseq_append(expr_rtn_outargs(exp), &outargs);
+    // A routine name brings its own linkage; otherwise the default (LRM 12.1.3)
+    if (expr_type(rtn) == EXPTYPE_PRIM_SEG &&
+        name_type(expr_seg_name(rtn)) == LEXTYPE_NAME_ROUTINE) {
+        expr_rtn_linkage_set(exp, -1);
+    } else {
+        expr_rtn_linkage_set(exp, switch_linkage(parser_scope_get(pctx)));
+    }
 
     // This expression has a value unless it was a NOVALUE routine
     if (expr_type(rtn) == EXPTYPE_PRIM_SEG) {
@@ -1388,9 +1428,6 @@ parse_primary (expr_ctx_t ctx, lextype_t lt, lexeme_t *lex)
         }
         exp = rtncall;
     }
-
-    // XXX Must also check for general routine calls, once we
-    //  have linkages worked in
 
     // At this point, 'exp' is the primary expression.
     // If it's not already a field-ref, see if we've got one.

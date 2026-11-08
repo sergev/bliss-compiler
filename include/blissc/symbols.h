@@ -70,6 +70,11 @@ struct data_attr_s {
 };
 typedef struct data_attr_s data_attr_t;
 
+// Linkage types (LRM 13.3)
+#define LNKTYPE_CALL        0
+#define LNKTYPE_JSB         1
+#define LNKTYPE_INTERRUPT   2
+
 struct routine_attr_s {
     namereflist_t       inargs;
     namereflist_t       outargs;
@@ -78,6 +83,7 @@ struct routine_attr_s {
     unsigned int        flags;
     symscope_t          sc;
     initval_t          *ivlist;
+    int                 linkage;    // LNKTYPE_xxx
 };
 typedef struct routine_attr_s routine_attr_t;
 
@@ -185,5 +191,8 @@ initval_t *initval_ivlist_add(symctx_t ctx, initval_t *head, unsigned int reps,
 void initval_freelist(symctx_t ctx, initval_t *iv);
 unsigned int initval_size(symctx_t ctx, initval_t *ivlist);
 initval_t *preset_expr_add(symctx_t ctx, initval_t *head, void *pexp, void *exp);
+
+name_t *linkage_declare(scopectx_t scope, strdesc_t *dsc, int lnktype, textpos_t pos);
+int linkage_type(name_t *np);
 
 #endif /* symbols_h__ */

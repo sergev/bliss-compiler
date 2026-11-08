@@ -1363,14 +1363,14 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                       decltype_t dt, routine_attr_t *attr)
 {
     parse_ctx_t pctx = expr_parse_ctx(ctx);
-    int saw_psect, saw_novalue, saw_weak; // XXX need to handle linkage here
+    int saw_psect, saw_novalue, saw_weak, saw_lnk;
     int did1;
     int which;
     static lextype_t delims[3] = { LEXTYPE_DELIM_SEMI,
                                    LEXTYPE_DELIM_COMMA,
                                    LEXTYPE_OP_ASSIGN};
 
-    saw_psect = saw_novalue = 0;
+    saw_psect = saw_novalue = saw_lnk = 0;
     saw_weak = (dt == DCL_GLOBAL || dt == DCL_EXTERNAL) ? 0 : -1;
 
     if (attr->flags & SYM_M_BIND) {
@@ -1398,6 +1398,15 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                 did1 = 1;
                 saw_weak = 1;
                 attr->flags |= SYM_M_WEAK;
+            }
+        }
+        if (!saw_lnk) {
+            lexeme_t *lex;
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_NAME_LINKAGE, &lex, 1)) {
+                did1 = 1;
+                saw_lnk = 1;
+                attr->linkage = linkage_type(lexeme_ctx_get(lex));
+                lexeme_free(expr_lexmemctx(ctx), lex);
             }
         }
         which = parser_expect_oneof(pctx, QL_NORMAL, delims, 3, 0, 1);
@@ -1454,6 +1463,7 @@ declare_routine (expr_ctx_t ctx, scopectx_t scope, decltype_t dt, int is_bind)
         attr.flags = (is_bind ? SYM_M_BIND|SYM_M_PENDING : 0);
         attr.owner = psname;
         attr.sc = sc;
+        attr.linkage = switch_linkage(scope);
 
         if (dt != DCL_EXTERNAL && dt != DCL_FORWARD) {
             if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
@@ -1627,6 +1637,109 @@ undeclare (parse_ctx_t pctx, scopectx_t scope)
 } /* undeclare */
 
 /*
+ * skip_parens
+ *
+ * Skips a parenthesized group, if there is one.
+ */
+static void
+skip_parens (parse_ctx_t pctx)
+{
+    int depth = 1;
+
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) return;
+    while (depth > 0) {
+        lextype_t lt = parser_next(pctx, QL_NORMAL, 0);
+        if (lt == LEXTYPE_END || lt == LEXTYPE_NONE) break;
+        if (lt == LEXTYPE_DELIM_LPAR) depth += 1;
+        else if (lt == LEXTYPE_DELIM_RPAR) depth -= 1;
+    }
+
+} /* skip_parens */
+
+/*
+ * LINKAGE (LRM 13.3)
+ *
+ * LINKAGE name = type { ( in-param,... { ; out-param,... } ) }
+ *                     { : option... } {,...} ;
+ *
+ * CALL is the C convention; JSB is a fast convention between BLISS
+ * routines. STANDARD parameter locations only; the register-usage
+ * options (GLOBAL, PRESERVE, NOPRESERVE, NOTUSED) are ignored.
+ */
+static int
+declare_linkage (expr_ctx_t ctx, scopectx_t scope)
+{
+    parse_ctx_t pctx = expr_parse_ctx(ctx);
+    static strdesc_t types[] = { STRDEF("CALL"), STRDEF("JSB") };
+    strdesc_t *namestr;
+    textpos_t pos;
+    lexeme_t *lex;
+    lextype_t lt;
+    int lnk;
+
+    while (1) {
+        if (!parse_decl_name(pctx, &namestr, &pos)) {
+            expr_signal(ctx, STC__NAMEEXP);
+            parser_skip_to_delim(pctx, LEXTYPE_DELIM_SEMI);
+            return 0;
+        }
+        if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_OP_ASSIGN, 0, 1)) {
+            expr_signal(ctx, STC__OPEREXP, "=");
+        }
+        parser_next(pctx, QL_NAME, &lex);
+        for (lnk = 0; lnk < (int) (sizeof(types)/sizeof(types[0])); lnk++) {
+            if (strings_eql(lexeme_text(lex), &types[lnk])) break;
+        }
+        if (lnk == (int) (sizeof(types)/sizeof(types[0]))) {
+            expr_signal(ctx, STC__LNKTYPUNS, lexeme_text(lex));
+            lnk = LNKTYPE_CALL;
+        }
+        lexeme_free(expr_lexmemctx(ctx), lex);
+        // Parameter locations
+        if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+            int depth = 1, saw_reg = 0;
+            while (depth > 0) {
+                lt = parser_next(pctx, QL_NORMAL, 0);
+                if (lt == LEXTYPE_END || lt == LEXTYPE_NONE) break;
+                if (lt == LEXTYPE_DELIM_LPAR) depth += 1;
+                else if (lt == LEXTYPE_DELIM_RPAR) depth -= 1;
+                else if (lt == LEXTYPE_DCL_REGISTER && !saw_reg) {
+                    expr_signal(ctx, STC__LNKREGUNS);
+                    saw_reg = 1;
+                }
+            }
+        }
+        // Linkage options
+        if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COLON, 0, 1)) {
+            while (1) {
+                lt = parser_next(pctx, QL_NAME, &lex);
+                if (lt == LEXTYPE_DELIM_COMMA || lt == LEXTYPE_DELIM_SEMI ||
+                    lt == LEXTYPE_END || lt == LEXTYPE_NONE) {
+                    parser_insert(pctx, lex);
+                    break;
+                }
+                lexeme_free(expr_lexmemctx(ctx), lex);
+                skip_parens(pctx);
+            }
+        }
+        if (linkage_declare(scope, namestr, lnk, pos) == 0) {
+            expr_signal(ctx, STC__INTCMPERR, "declare_linkage");
+        }
+        string_free(expr_strctx(ctx), namestr);
+        if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_SEMI, 0, 1)) {
+            break;
+        }
+        if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
+            expr_signal(ctx, STC__DELIMEXP, ",");
+            parser_skip_to_delim(pctx, LEXTYPE_DELIM_SEMI);
+            break;
+        }
+    }
+    return 1;
+
+} /* declare_linkage */
+
+/*
  * BUILTIN
  *
  * Parses BUILTIN declarations, making the builtin name visible in
@@ -1675,6 +1788,9 @@ declarations_init (expr_ctx_t ctx, parse_ctx_t pctx,
         STRDEF("%BPUNIT"), STRDEF("%BPADDR"), STRDEF("%BPVAL"),
         STRDEF("%UPVAL") };
     static strdesc_t errswitch = STRDEF("ERRS");
+    static strdesc_t lnkdsc[4] = {
+        STRDEF("BLISS"), STRDEF("FORTRAN"), STRDEF("FORTRAN_SUB"),
+        STRDEF("FORTRAN_FUNC") };
 
     for (i = 0; i < sizeof(decl_names)/sizeof(decl_names[0]); i++) {
         name_declare(kwdscope, &decl_names[i], 0, 0, 0, 0);
@@ -1701,6 +1817,11 @@ declarations_init (expr_ctx_t ctx, parse_ctx_t pctx,
     litsym_declare(kwdscope, &bpdsc[3], &attr, 0);
     structures_init(ctx, kwdscope);
     switch_toggle_declare(kwdscope, &errswitch, toggle_errs, 0, 0, &errson, &errsoff);
+    switch_linkage_declare(kwdscope);
+    // Predeclared linkages (LRM 13.3.5)
+    for (i = 0; i < sizeof(lnkdsc)/sizeof(lnkdsc[0]); i++) {
+        linkage_declare(kwdscope, &lnkdsc[i], LNKTYPE_CALL, 0);
+    }
 
     return dctx;
 
@@ -1766,6 +1887,9 @@ parse_declaration (expr_ctx_t ctx)
     switch (lt) {
         case LEXTYPE_DCL_BUILTIN:
             status = declare_builtin(pctx, scope);
+            break;
+        case LEXTYPE_DCL_LINKAGE:
+            status = declare_linkage(ctx, scope);
             break;
         case LEXTYPE_DCL_BIND:
             if (libgen && dtypes[which] == DCL_GLOBAL) {

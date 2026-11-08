@@ -175,7 +175,11 @@ STATCODE(124,E,DCLAFTEXP, "declarations must precede expressions in a block") \
 STATCODE(125,F,MACDEPTH,  "macro expansions nested too deeply (runaway recursion?)") \
 STATCODE(126,E,CASERANGE, "case label outside the FROM-TO range of CASE") \
 STATCODE(127,E,LNKFNRTN,  "!SD can only be used inside a routine") \
-STATCODE(128,E,WEAKNOTGBL,"WEAK can only be used in GLOBAL or EXTERNAL declarations")
+STATCODE(128,E,WEAKNOTGBL,"WEAK can only be used in GLOBAL or EXTERNAL declarations") \
+STATCODE(129,E,LNKTYPUNS, "linkage type !SD not supported") \
+STATCODE(130,E,LNKREGUNS, "REGISTER parameter locations not supported") \
+STATCODE(131,E,LNKNAMEXP, "linkage name expected") \
+STATCODE(132,E,LNKFNLNK,  "!SD requires a CALL linkage")
 
 typedef unsigned int statcode_t;
 #ifdef STATCODES_INSTANTIATE

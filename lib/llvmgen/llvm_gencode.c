@@ -99,7 +99,7 @@ llvmgen_btrack_finalize (gencodectx_t gctx, llvm_btrack_t *bt, LLVMTypeRef neede
 int
 gencode_routine_begin (gencodectx_t gctx, name_t *np)
 {
-    LLVMValueRef thisfn = LLVMGetNamedFunction(gctx->module, name_azstring(np));
+    LLVMValueRef thisfn = llvmgen_rtntype_info(gctx, np, 0, 0);
     llvm_rtntrack_t *rt;
     LLVMBasicBlockRef entryblk, exitblk;
 
@@ -393,6 +393,7 @@ gen_main (gencodectx_t gctx, name_t *modnp)
     LLVMBuildStore(builder, LLVMConstInt(gctx->fullwordtype, nargs, 0),
                    llvmgen_argcount_global(gctx));
     val = LLVMBuildCall2(builder, fntype, rtn, args, nargs, "");
+    LLVMSetInstructionCallConv(val, LLVMGetFunctionCallConv(rtn));
     rettype = LLVMGetReturnType(fntype);
     if (LLVMGetTypeKind(rettype) == LLVMIntegerTypeKind) {
         val = LLVMBuildIntCast2(builder, val, i32type, 1, "");

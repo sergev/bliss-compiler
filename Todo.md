@@ -3,25 +3,9 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T6. LINKAGE declarations
-
-Currently SYNTAXERR. Implement only what maps onto LLVM calling conventions.
-
-- Parse `LINKAGE name = type (params) : options` with types `CALL` (C
-  convention) and `FASTCALL`-like register passing (`fastcc` or
-  `x86_regcallcc`); store as a new linkage symbol type in `symbols.c`.
-- Accept a linkage name as a routine attribute (`declarations.c` ~line
-  1344) and on `EXTERNAL ROUTINE`; carry it to the routine's genspace.
-- Back end: `LLVMSetFunctionCallConv` on definitions and calls; register
-  parameter locations other than the convention's own are an error.
-- General routine calls `linkage-name (address, args)`, e.g.
-  `BLISS (.l, 0)` (LRM 12.2, UM 5.2.5); now UNDCLNAME. Predeclare the
-  default linkage name and allow user ones (`expression.c` ~line 1392).
-- Test: two routines with a non-default linkage calling each other.
-
 ## T7. GLOBAL REGISTER and EXTERNAL REGISTER
 
-Variables pinned to a named machine register. Depends on T6.
+Variables pinned to a named machine register.
 
 - Parse in `declarations.c`; the register number maps to an x86 register
   name in `llvm_machines.c`.
@@ -60,12 +44,12 @@ The largest task; VMS-style handlers.
 
 ## T9. INTERRUPT linkage type
 
-Depends on T6. In the LRM, INTERRUPT is a linkage-type, not a routine
+In the LRM, INTERRUPT is a linkage-type, not a routine
 attribute (BLISS-16 13.2.4.1, BLISS-32 13.3.4.2; BLISS-36 has
 PS_INTERRUPT); a routine gets it through `LINKAGE l = INTERRUPT;` and
 `ROUTINE r : l`. Such a routine must not be called directly.
 
-- Accept `INTERRUPT` as a linkage-type in T6; map it to the LLVM
+- Accept `INTERRUPT` as a linkage-type (`declare_linkage`); map it to the LLVM
   `x86_intrcc` calling convention. Reject direct calls to it.
 - Test: compile-only check of the emitted calling convention (`!! cout`
   or object inspection).

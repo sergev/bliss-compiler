@@ -544,6 +544,55 @@ compiletime_deserialize (void *vctx, name_t *np, void *fh,
 } /* compiletime_deserialize */
 
 /*
+ * linkage_serialize, linkage_deserialize
+ *
+ * A linkage name's value is its LNKTYPE_xxx.
+ */
+static int
+linkage_serialize (void *vctx, name_t *np, void *fh)
+{
+    long val = name_value_signed(np);
+    return name_serialize(np, fh, &val, sizeof(val));
+
+} /* linkage_serialize */
+
+static int
+linkage_deserialize (void *vctx, name_t *np, void *fh, unsigned int count)
+{
+    long val;
+    size_t len;
+
+    if (count == sizeof(val) && file_readbuf(fh, &val, count, &len) > 0 && len == count) {
+        name_value_signed_set(np, val);
+        return 1;
+    }
+    return 0;
+
+} /* linkage_deserialize */
+
+/*
+ * linkage_declare
+ */
+name_t *
+linkage_declare (scopectx_t scope, strdesc_t *dsc, int lnktype, textpos_t pos)
+{
+    namedef_t ndef;
+    name_t *np;
+
+    memset(&ndef, 0, sizeof(ndef));
+    ndef.lt = LEXTYPE_NAME_LINKAGE;
+    ndef.flags = NAME_M_DECLARED;
+    ndef.name = dsc->ptr;
+    ndef.namelen = dsc->len;
+    np = name_declare(scope, &ndef, pos, 0, 0, 0);
+    if (np != 0) name_value_signed_set(np, lnktype);
+    return np;
+
+} /* linkage_declare */
+
+int linkage_type (name_t *np) { return (int) name_value_signed(np); }
+
+/*
  * bind_literal
  *
  * Binds a literal to its value.  Called by the
@@ -781,6 +830,9 @@ datasym_deserialize (void *vctx, name_t *np, void *fh,
     attr->alignment = serattr.alignment;
     attr->width = serattr.width;
     attr->sc = (symscope_t) serattr.symscope;
+    if (attr->sc == SYMSCOPE_EXTERNAL) {
+        attr->dclass = DCLASS_STATIC;
+    }
     if ((attr->flags & SYM_M_BIND) != 0) {
         attr->ivlist = initval_scalar_add(expr_symctx(ctx), 0, 1,
                                           serattr.value, attr->width,
@@ -852,6 +904,7 @@ struct rtn_serattr_s {
     unsigned int symscope;
     unsigned int incount;
     unsigned int outcount;
+    int linkage;
 };
 
 /*
@@ -893,6 +946,7 @@ rtnsym_serialize (void *vctx, name_t *np, void *fh)
     }
     serattr.flags = attr->flags & (SYM_M_BIND|SYM_M_NOVALUE|SYM_M_REF|SYM_M_WEAK);
     serattr.symscope = (unsigned int) attr->sc;
+    serattr.linkage = attr->linkage;
     serattr.incount = namereflist_length(&attr->inargs);
     serattr.outcount = namereflist_length(&attr->outargs);
 
@@ -926,6 +980,7 @@ rtnsym_deserialize (void *vctx, name_t *np, void *fh,
     if (len != count) return 0;
     attr->flags |= serattr.flags;
     attr->sc = (symscope_t) serattr.symscope;
+    attr->linkage = serattr.linkage;
     if (serattr.incount + serattr.outcount != 0) {
         attr->argscope = scope_begin(expr_namectx(ctx), 0);
         if (!scope_deserialize(attr->argscope, fh, 1)) return 0;
@@ -962,6 +1017,8 @@ symbols_init (expr_ctx_t ctx)
     machinedef_t *mach = expr_machinedef(ctx);
     static nametype_vectors_t compiletime_vec = { 0, 0, 0, 0,
             compiletime_serialize, compiletime_deserialize };
+    static nametype_vectors_t linkage_vec = { 0, 0, 0, 0,
+            linkage_serialize, linkage_deserialize };
 
     memset(symctx, 0, sizeof(struct symctx_s));
     symctx->logctx = expr_logctx(ctx);
@@ -982,6 +1039,7 @@ symbols_init (expr_ctx_t ctx)
     expr_dispatch_register(ctx, LEXTYPE_NAME_ROUTINE, bind_routine);
     expr_dispatch_register(ctx, LEXTYPE_NAME_LITERAL, bind_extliteral);
     nametype_dataop_register(namectx, LEXTYPE_NAME_COMPILETIME, &compiletime_vec, symctx);
+    nametype_dataop_register(namectx, LEXTYPE_NAME_LINKAGE, &linkage_vec, symctx);
 
     return symctx;
 

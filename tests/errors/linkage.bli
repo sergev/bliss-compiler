@@ -1,0 +1,21 @@
+MODULE test =
+BEGIN
+
+! Linkages blissc cannot express on x86 (LRM 13.3).
+
+LINKAGE
+    regs = JSB (REGISTER = 0, STANDARD),
+!! cerr %BLISS-E-LNKREGUNS,
+    pj = PUSHJ;
+!! cerr %BLISS-E-LNKTYPUNS,
+
+! ACTUALCOUNT needs a CALL linkage (LRM 13.6.1.1)
+ROUTINE r (a) : regs =
+    BEGIN
+    BUILTIN ACTUALCOUNT;
+    ACTUALCOUNT ()
+    END;
+!! cerr %BLISS-E-LNKFNLNK,
+
+END
+ELUDOM

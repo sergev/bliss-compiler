@@ -300,7 +300,8 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     expr_node_t *rtnexp = expr_rtnaddr(exp);
     exprseq_t *args = expr_rtn_inargs(exp);
     expr_node_t *arg;
-    LLVMValueRef rtnadr, result, argvals[LLVMGEN_K_MAXARGS];
+    LLVMValueRef rtnadr, result, call, argvals[LLVMGEN_K_MAXARGS];
+    unsigned int cc;
     LLVMTypeRef type, rettype, argtypes[LLVMGEN_K_MAXARGS];
     unsigned int i, argcount = exprseq_length(args), formalcount;
 
@@ -328,7 +329,18 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
         for (i = argcount; i < formalcount; i++) argvals[i] = LLVMConstNull(argtypes[i]);
         argcount = formalcount;
     }
-    if (argcount > formalcount && !LLVMIsFunctionVarArg(type)) {
+    // The calling convention: given by the call, or the routine's own
+    if (expr_rtn_linkage(exp) >= 0) {
+        cc = llvmgen_callconv(expr_rtn_linkage(exp));
+    } else if (LLVMIsAFunction(rtnadr)) {
+        cc = LLVMGetFunctionCallConv(rtnadr);
+    } else {
+        cc = LLVMCCallConv;
+    }
+    if (cc != LLVMCCallConv) {
+        // fastcc cannot be varargs: call with the actual argument types
+        type = LLVMFunctionType(rettype, argtypes, argcount, 0);
+    } else if (argcount > formalcount && !LLVMIsFunctionVarArg(type)) {
         // extra arguments, for ACTUALPARAMETER
         type = LLVMFunctionType(rettype, argtypes, formalcount, 1);
     }
@@ -338,14 +350,16 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
 
     if (LLVMGetTypeKind(rettype) == LLVMVoidTypeKind) {
         result = 0;
-        LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount, "");
+        call = LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount, "");
         if (neededtype != 0) {
             log_signal(expr_logctx(gctx->ectx), expr_textpos(rtnexp), STC__EXPRVALRQ);
             result = LLVMConstNull(neededtype);
         }
     } else {
-        result = LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount, llvmgen_temp(gctx));
+        result = call = LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount,
+                                       llvmgen_temp(gctx));
     }
+    LLVMSetInstructionCallConv(call, cc);
 
     return (result == 0 ? 0 : llvmgen_adjustval(gctx, result, neededtype, 0));
 

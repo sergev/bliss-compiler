@@ -10,3 +10,10 @@ MACRO
         test_printf(UPLIT(%STRING('TEST %03d: ', fmt, %CHAR(10), %CHAR(0))),
                     num %IF NOT %NULL(%REMAINING) %THEN , %REMAINING %FI)%;
         
+! For tests of EXTERNAL declarations and linkages loaded from a library
+LINKAGE
+    test_jsb = JSB;
+EXTERNAL ROUTINE
+    test_jsb_twice : test_jsb;      ! defined in routines.bli
+EXTERNAL
+    test_extdata2;                  ! defined in testharness.c

@@ -16,6 +16,7 @@ int TEST_INIT(void);
 
 /* For EXTERNAL data and EXTERNAL/GLOBAL LITERAL tests */
 long TEST_EXTDATA[3] = { 10, 20, 30 };
+long TEST_EXTDATA2 = 99;
 __asm__(".globl TEST_EXTLIT\n.set TEST_EXTLIT, 1234");
 extern char TEST_GLOBLIT[] __attribute__((weak));   /* defined by misc.bli */
 long TEST_GLOBLIT_VALUE (void) { return (long) TEST_GLOBLIT; }
