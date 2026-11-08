@@ -133,6 +133,22 @@ gen_case (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
 } /* gen_case */
 
 /*
+ * start_dead_block
+ *
+ * After an unconditional exit, code that follows is unreachable;
+ * give it a fresh basic block so it is not appended after the
+ * terminator.
+ */
+static void
+start_dead_block (gencodectx_t gctx)
+{
+    LLVMBasicBlockRef blk = LLVMAppendBasicBlockInContext(gctx->llvmctx, gctx->curfn->func,
+                                                          llvmgen_label(gctx));
+    LLVMPositionBuilderAtEnd(gctx->curfn->builder, blk);
+
+} /* start_dead_block */
+
+/*
  * gen_loop_or_block_exit
  *
  * Generates code for LEAVE and EXITLOOP exit expresions.
@@ -146,6 +162,7 @@ gen_loop_or_block_exit (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededt
     LLVMValueRef exitval = (exitexp == 0 ? 0 : llvmgen_expression(gctx, exitexp, neededtype));
 
     llvmgen_btrack_update(gctx, bt, exitval);
+    start_dead_block(gctx);
 
     return exitval;
 
@@ -163,6 +180,7 @@ gen_return (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     LLVMValueRef retval = (retexp == 0 ? 0 : llvmgen_expression(gctx, retexp, gctx->fullwordtype));
 
     llvmgen_btrack_update(gctx, gctx->curfn->btrack[LLVMGEN_K_BT_FUNC], retval);
+    start_dead_block(gctx);
 
     if (retval != 0) retval = llvmgen_adjustval(gctx, retval, neededtype, 0);
     return retval;
@@ -190,6 +208,7 @@ gen_select (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     LLVMBasicBlockRef curblk, otherwise, always, insertpoint, testinspoint;
     LLVMValueRef idxval, v, result;
     LLVMTypeRef actiontype = (hasval ? gctx->fullwordtype : 0);
+    LLVMValueRef matchflag = 0, matchslot = 0;
     struct seltrack_s {
         LLVMValueRef testval, matchval;
         LLVMBasicBlockRef testblk, testend;
@@ -259,6 +278,20 @@ gen_select (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
         st = stlocal;
     }
     memset(st, 0, numtests * sizeof(struct seltrack_s));
+    // SELECT runs OTHERWISE only if no other selector matched,
+    // so record matches (and the matched value) in stack slots
+    if (!is_selectone && otherwise != 0) {
+        LLVMBuilderRef eb = LLVMCreateBuilderInContext(gctx->llvmctx);
+        LLVMBasicBlockRef entry = LLVMGetEntryBasicBlock(gctx->curfn->func);
+        LLVMValueRef first = LLVMGetFirstInstruction(entry);
+        if (first != 0) LLVMPositionBuilderBefore(eb, first);
+        else LLVMPositionBuilderAtEnd(eb, entry);
+        matchflag = LLVMBuildAlloca(eb, gctx->int1type, llvmgen_temp(gctx));
+        if (hasval) matchslot = LLVMBuildAlloca(eb, gctx->fullwordtype, llvmgen_temp(gctx));
+        LLVMDisposeBuilder(eb);
+        LLVMPositionBuilderAtEnd(builder, curblk);
+        LLVMBuildStore(builder, LLVMConstNull(gctx->int1type), matchflag);
+    }
     testinspoint = insertpoint;
     for (i = 0, sel = exprseq_head(selseq); sel != 0; i++, sel = sel->tq_next) {
         expr_node_t *subsel;
@@ -268,8 +301,15 @@ gen_select (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
             st[i].matchdest = LLVMInsertBasicBlockInContext(gctx->llvmctx, insertpoint,
                                                             llvmgen_label(gctx));
             LLVMPositionBuilderAtEnd(builder, st[i].matchdest);
+            if (matchflag != 0) {
+                LLVMBuildStore(builder, LLVMConstAllOnes(gctx->int1type), matchflag);
+            }
             st[i].matchval = llvmgen_expression(gctx, expr_selector_action(sel),
                                                 actiontype);
+            if (matchslot != 0 && st[i].matchval != 0) {
+                LLVMBuildStore(builder, llvmgen_adjustval(gctx, st[i].matchval,
+                                                          gctx->fullwordtype, 0), matchslot);
+            }
             st[i].matchdestend = LLVMGetInsertBlock(builder);
             if (testinspoint == insertpoint) {
                 testinspoint = st[i].matchdest;
@@ -317,6 +357,25 @@ gen_select (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
                 } else {
                     nextifnomatch = always;
                 }
+            } else if (matchflag != 0) {
+                // Something matched earlier: skip OTHERWISE
+                LLVMBasicBlockRef chk = LLVMInsertBasicBlockInContext(gctx->llvmctx, otherwise,
+                                                                     llvmgen_label(gctx));
+                LLVMBuilderRef cb = LLVMCreateBuilderInContext(gctx->llvmctx);
+                LLVMValueRef matched;
+                LLVMPositionBuilderAtEnd(cb, chk);
+                matched = LLVMBuildLoad2(cb, gctx->int1type, matchflag, llvmgen_temp(gctx));
+                LLVMBuildCondBr(cb, matched, (always == 0 ? exitblk : always), otherwise);
+                if (always == 0) {
+                    llvmgen_btrack_update_brcount(gctx, bt);
+                    if (hasval) {
+                        LLVMPositionBuilderBefore(cb, LLVMGetBasicBlockTerminator(chk));
+                        llvmgen_btrack_update_phi(gctx, bt, chk,
+                            LLVMBuildLoad2(cb, gctx->fullwordtype, matchslot, llvmgen_temp(gctx)));
+                    }
+                }
+                LLVMDisposeBuilder(cb);
+                nextifnomatch = chk;
             } else {
                 nextifnomatch = otherwise;
             }
