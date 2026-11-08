@@ -62,6 +62,7 @@ static namedef_t decl_names[] = {
     NAMEDEF("BIND", LEXTYPE_DCL_BIND, NAME_M_RESERVED),
     NAMEDEF("PSECT", LEXTYPE_DCL_PSECT, NAME_M_RESERVED),
     NAMEDEF("BUILTIN", LEXTYPE_DCL_BUILTIN, NAME_M_RESERVED),
+    NAMEDEF("ENABLE", LEXTYPE_DCL_ENABLE, NAME_M_RESERVED),
     NAMEDEF("UNDECLARE", LEXTYPE_DCL_UNDECLARE, NAME_M_RESERVED),
     NAMEDEF("REQUIRE", LEXTYPE_DCL_REQUIRE, NAME_M_RESERVED),
     NAMEDEF("LIBRARY", LEXTYPE_DCL_LIBRARY, NAME_M_RESERVED),
@@ -78,8 +79,8 @@ static namedef_t decl_names[] = {
     NAMEDEF("WORD", LEXTYPE_AU_WORD, NAME_M_RESERVED),
     NAMEDEF("LONG", LEXTYPE_AU_LONG, NAME_M_RESERVED),
     NAMEDEF("QUAD", LEXTYPE_AU_QUAD, NAME_M_RESERVED),
-    NAMEDEF("CODE", LEXTYPE_KWD_CODE, NAME_M_RESERVED),
-    NAMEDEF("NODEFAULT", LEXTYPE_KWD_NODEFAULT, NAME_M_RESERVED),
+    NAMEDEF("CODE", LEXTYPE_KWD_CODE, 0),
+    NAMEDEF("NODEFAULT", LEXTYPE_KWD_NODEFAULT, 0),
     NAMEDEF("WRITE", LEXTYPE_KWD_WRITE, 0),
     NAMEDEF("NOWRITE", LEXTYPE_KWD_NOWRITE, 0),
     NAMEDEF("EXECUTE", LEXTYPE_KWD_EXECUTE, 0),
@@ -163,6 +164,23 @@ declare_compiletime (expr_ctx_t ctx, scopectx_t scope, lextype_t curlt)
 
 
 /*
+ * is_unreserved_kwd
+ *
+ * True for an unreserved keyword (e.g. CODE, WRITE), which can be
+ * declared as a name (LRM Appendix A).
+ */
+static int
+is_unreserved_kwd (lexeme_t *lex)
+{
+    lextype_t lt = lexeme_type(lex);
+    name_t *np = lexeme_ctx_get(lex);
+
+    return (lt >= LEXTYPE_EXPKWD_MIN && np != 0 && name_type(np) == lt &&
+            (name_flags(np) & NAME_M_RESERVED) == 0);
+
+} /* is_unreserved_kwd */
+
+/*
  * parse_decl_name
  *
  * Common parsing logic for names to be declared
@@ -176,7 +194,8 @@ parse_decl_name (parse_ctx_t pctx, strdesc_t **result, textpos_t *pos)
 
     lt = parser_next(pctx, QL_NAME, &lex);
 
-    if (lt == LEXTYPE_NAME || lexeme_boundtype(lex) == LEXTYPE_NAME) {
+    if (lt == LEXTYPE_NAME || lexeme_boundtype(lex) == LEXTYPE_NAME ||
+        is_unreserved_kwd(lex)) {
         strdesc_t *ltext = lexeme_text(lex);
         if (ltext->len > NAME_SIZE) {
             log_signal(parser_logctx(pctx), parser_curpos(pctx),
@@ -1821,6 +1840,66 @@ declare_linkage (expr_ctx_t ctx, scopectx_t scope)
 } /* declare_linkage */
 
 /*
+ * ENABLE (LRM 17.2)
+ *
+ * ENABLE routine-name { ( enable-actual, ... ) } ;
+ *
+ * Establishes a condition handler for the routine; the code is
+ * generated at the start of the routine body.
+ */
+static int
+declare_enable (expr_ctx_t ctx, scopectx_t scope)
+{
+    parse_ctx_t pctx = expr_parse_ctx(ctx);
+    namectx_t namectx = expr_namectx(ctx);
+    name_t *rtn = expr_current_routine(ctx);
+    routine_attr_t *attr = (rtn == 0 ? 0 : rtnsym_attr(rtn));
+    lexeme_t *lex;
+    name_t *hnp = 0;
+
+    if (attr == 0 || attr->enblrtn != 0) {
+        expr_signal(ctx, STC__ENBLRTN);
+        attr = 0;
+    }
+    if (parser_expect(pctx, QL_NORMAL, LEXTYPE_NAME_ROUTINE, &lex, 1)) {
+        hnp = lexeme_ctx_get(lex);
+        lexeme_free(expr_lexmemctx(ctx), lex);
+    } else {
+        expr_signal(ctx, STC__NAMEEXP);
+    }
+    if (attr != 0) attr->enblrtn = hnp;
+    if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+        while (1) {
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_NAME_DATA, &lex, 1)) {
+                if (attr != 0) {
+                    namereflist_instail(&attr->enblargs,
+                                        nameref_alloc(namectx, lexeme_ctx_get(lex)));
+                }
+                lexeme_free(expr_lexmemctx(ctx), lex);
+            } else {
+                expr_signal(ctx, STC__ENBLARG);
+                parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+                break;
+            }
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
+                break;
+            }
+            if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
+                expr_signal(ctx, STC__DELIMEXP, ",");
+                parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+                break;
+            }
+        }
+    }
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_SEMI, 0, 1)) {
+        expr_signal(ctx, STC__DELIMEXP, ";");
+        parser_skip_to_delim(pctx, LEXTYPE_DELIM_SEMI);
+    }
+    return 1;
+
+} /* declare_enable */
+
+/*
  * BUILTIN
  *
  * Parses BUILTIN declarations, making the builtin name visible in
@@ -1974,6 +2053,9 @@ parse_declaration (expr_ctx_t ctx)
             break;
         case LEXTYPE_DCL_LINKAGE:
             status = declare_linkage(ctx, scope);
+            break;
+        case LEXTYPE_DCL_ENABLE:
+            status = declare_enable(ctx, scope);
             break;
         case LEXTYPE_DCL_BIND:
             if (libgen && dtypes[which] == DCL_GLOBAL) {

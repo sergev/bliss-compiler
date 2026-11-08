@@ -1,0 +1,59 @@
+! chf.req - condition values for condition handling (LRM 17.6.1.2).
+!
+! Compile into a library with "blissc --library chf.req" and use it with
+! LIBRARY 'chf.lib'. SS$_UNWIND is defined by the run-time library (blissrt).
+
+FIELD
+    condit_fields =
+        SET
+        sts$v_severity = [0, 0, 3, 0],      ! severity field
+        sts$v_success  = [0, 0, 1, 0],      ! success field (subfield of severity)
+        sts$v_cond_id  = [0, 3, 25, 0],     ! identity field
+        sts$v_msg_no   = [0, 3, 13, 0],     ! message number field
+        sts$v_fac_sp   = [0, 15, 1, 0],     ! facility-specific flag
+        sts$v_code     = [0, 3, 12, 0],     ! code for condition only
+        sts$v_fac_no   = [0, 16, 12, 0],    ! facility code
+        sts$v_cust_def = [0, 27, 1, 0]      ! customer definition flag
+        TES;
+
+MACRO
+    condition_value = BLOCK [1] FIELD (condit_fields) %;
+
+LITERAL
+    sts$k_warning = 0,                      ! warning
+    sts$k_success = 1,                      ! successful completion
+    sts$k_error   = 2,                      ! error
+    sts$k_info    = 3,                      ! information
+    sts$k_severe  = 4;                      ! severe error
+
+KEYWORDMACRO
+    sts$value (
+        severity = sts$k_severe,            ! default is severe error
+        code,                               ! no default
+        fac_sp = 1^15,                      ! default is facility specific
+        fac_no = 0,                         ! arbitrary default
+        cust_def = 1^27) =                  ! default is user definition
+            (severity AND 7) OR
+            (code AND (1^13-1))^3 OR
+            (IF fac_sp NEQ 0 THEN 1^15 ELSE 0) OR
+            (fac_no AND (1^12-1))^16 OR
+            (IF cust_def NEQ 0 THEN 1^27 ELSE 0) %;
+
+! True if two condition values denote the same condition
+MACRO
+    sts$match (a, b) =
+        BEGIN
+        LOCAL
+            qqqqa : condition_value,
+            qqqqb : condition_value;
+        qqqqa = (a);
+        qqqqb = (b);
+        IF NOT (.qqqqa [sts$v_fac_sp] OR .qqqqb [sts$v_fac_sp])
+        THEN
+            .qqqqa [sts$v_code] EQL .qqqqb [sts$v_code]
+        ELSE
+            .qqqqa [sts$v_cond_id] EQL .qqqqb [sts$v_cond_id]
+        END %;
+
+EXTERNAL LITERAL
+    ss$_unwind;

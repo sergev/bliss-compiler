@@ -62,6 +62,14 @@ target_link_libraries(blissc
 target_link_options(blissc PUBLIC ${LLVM_LDFLAGS})
 configure_file(${CMAKE_SOURCE_DIR}/cmake/config.h.in ${blissc_BINARY_DIR}/include/blissc/config.h @ONLY)
 
+# Run-time library for compiled programs (condition handling)
+add_library(blissrt STATIC lib/runtime/blissrt.c)
+add_custom_target(chflib ALL
+        COMMAND $<TARGET_FILE:blissc> --library -o ${CMAKE_BINARY_DIR}/chf.lib ${CMAKE_SOURCE_DIR}/lib/runtime/chf.req
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/tests
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/chf.lib ${CMAKE_BINARY_DIR}/tests/chf.lib
+        DEPENDS blissc ${CMAKE_SOURCE_DIR}/lib/runtime/chf.req)
+
 if (${Python3_FOUND})
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 add_custom_target(testharness ALL
@@ -86,9 +94,9 @@ endforeach()
 add_custom_target(mxlibs ALL DEPENDS ${MX_LIB_FILES})
 
 add_custom_target(check
-        COMMAND python3 "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc="${CMAKE_C_COMPILER}" "${CMAKE_SOURCE_DIR}/tests"
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc="${CMAKE_C_COMPILER}" --runtime=$<TARGET_FILE:blissrt> "${CMAKE_SOURCE_DIR}/tests"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-        DEPENDS testharness mxlibs blissc)
+        DEPENDS testharness mxlibs blissc blissrt chflib)
 
 # One CTest test per .bli file
 enable_testing()
@@ -96,7 +104,7 @@ file(GLOB_RECURSE BLISS_TESTS RELATIVE ${CMAKE_SOURCE_DIR}/tests CONFIGURE_DEPEN
 foreach(test ${BLISS_TESTS})
   string(REGEX REPLACE "\\.bli$" "" name ${test})
   add_test(NAME ${name}
-           COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc=${CMAKE_C_COMPILER} "${CMAKE_SOURCE_DIR}/tests/${test}"
+           COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc=${CMAKE_C_COMPILER} --runtime=$<TARGET_FILE:blissrt> "${CMAKE_SOURCE_DIR}/tests/${test}"
            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 endforeach()
 else()

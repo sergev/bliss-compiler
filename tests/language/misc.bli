@@ -5,7 +5,8 @@ BEGIN
 ! address relations, DECRA, VOLATILE, PSECT, FORWARD/EXTERNAL data,
 ! EXTERNAL/GLOBAL LITERAL, GLOBAL BIND, general structure references,
 ! SWITCHES, REQUIRE, %REQUIRE, %QUOTENAME, CH$SIZE,
-! CODECOMMENT, BUILTIN, QUAD, UNDECLARE, low-bit tests, WEAK.
+! CODECOMMENT, BUILTIN, QUAD, UNDECLARE, low-bit tests, WEAK,
+! unreserved keywords as names.
 
 LIBRARY 'testharness.lib';
 REQUIRE 'misc.req';
@@ -61,13 +62,13 @@ UNDECLARE tmp;
 BUILTIN
     MOVSB;
 
-test_setup(numcases=24);
+test_setup(numcases=25);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL a, b, p;
 
-    CASE .caseno FROM 1 TO 24 OF
+    CASE .caseno FROM 1 TO 25 OF
     SET
         [1] : test_output(.caseno, 'comment=%ld', 1 %( + 100
                                                    + 200 )% + 2);
@@ -165,6 +166,15 @@ BEGIN
         [24] : test_output(.caseno, 'weakgbl=%ld,%ld,%ld', .test_wkdata, test_wkrtn (),
                            test_weaklit_value ());
 !! 24 weakgbl=7,2,33
+        [25] : BEGIN
+            ! Unreserved keywords (LRM Appendix A) can be declared
+            LOCAL code, write;
+            MACRO twice (code) = 2 * (code) %;
+            code = 1;
+            write = 20;
+            test_output(.caseno, 'unreserved=%ld', .code + .write + twice (100));
+        END;
+!! 25 unreserved=221
     TES;
 END;
 

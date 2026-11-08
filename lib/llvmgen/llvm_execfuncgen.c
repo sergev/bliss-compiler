@@ -70,6 +70,24 @@ static LLVMValueRef gen_actualparameter(gencodectx_t gctx, void *fctx,
 static LLVMValueRef gen_argptr(gencodectx_t gctx, void *fctx,
                                expr_node_t *node, LLVMTypeRef neededtype);
 
+static LLVMValueRef gen_signal(gencodectx_t gctx, void *fctx,
+                               expr_node_t *node, LLVMTypeRef neededtype);
+static LLVMValueRef gen_setunwind(gencodectx_t gctx, void *fctx,
+                                  expr_node_t *node, LLVMTypeRef neededtype);
+
+// Condition-handling functions (LRM 17.3), predeclared
+static struct {
+    const char *name;
+    unsigned int numargs;
+    unsigned int flags;
+    void *fctx;
+    llvmgen_execfunc_fn func;
+} chffuncs[] = {
+    { "SIGNAL",      1, FUNC_M_VARARGS,                (void *) 0, gen_signal },
+    { "SIGNAL_STOP", 1, FUNC_M_VARARGS|FUNC_M_NOVALUE, (void *) 1, gen_signal },
+    { "SETUNWIND",   0, 0,                             0,          gen_setunwind },
+};
+
 // Linkage functions (LRM 13.6); BUILTIN names
 static struct {
     const char *name;
@@ -147,6 +165,19 @@ llvmgen_execfuncgen_init (gencodectx_t gctx)
         fdef.numargs = lnkfuncs[i].numargs;
         fdef.flags = FUNC_M_BUILTIN;
         fdef.generator = (execfuncgenerator_fn) lnkfuncs[i].func;
+        if (execfunc_define(kwdscope, &fdef, 0) == 0) {
+            expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_execfuncgen_init");
+        }
+    }
+    for (i = 0; i < sizeof(chffuncs)/sizeof(chffuncs[0]); i++) {
+        funcdef_t fdef;
+        memset(&fdef, 0, sizeof(fdef));
+        strcpy(fdef.name, chffuncs[i].name);
+        fdef.namelen = strlen(chffuncs[i].name);
+        fdef.numargs = chffuncs[i].numargs;
+        fdef.flags = chffuncs[i].flags;
+        fdef.generator = (execfuncgenerator_fn) chffuncs[i].func;
+        fdef.genfnctx = chffuncs[i].fctx;
         if (execfunc_define(kwdscope, &fdef, 0) == 0) {
             expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_execfuncgen_init");
         }
@@ -1061,3 +1092,71 @@ gen_argptr (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededty
     return llvmgen_adjustval(gctx, argblock_fill(gctx), neededtype, 0);
 
 } /* gen_argptr */
+
+/*
+ * gen_signal
+ *
+ * SIGNAL and SIGNAL_STOP (LRM 17.3.2): builds the signal vector
+ * (count, condition value, parameters) and calls the run-time
+ * library, which searches for handlers.
+ */
+static LLVMValueRef
+gen_signal (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    exprseq_t *args = expr_func_arglist(exp);
+    LLVMTypeRef wt = gctx->fullwordtype;
+    unsigned int n = exprseq_length(args), i;
+    LLVMTypeRef vtype = LLVMArrayType(wt, n + 1);
+    LLVMValueRef sig, idx[2], v, cargs[2];
+    LLVMBuilderRef b;
+    expr_node_t *arg;
+
+    if (gctx->curfn == 0) {
+        expr_signal(gctx->ectx, STC__LNKFNRTN, name_string(expr_func_name(exp)));
+        return (neededtype == 0 ? 0 : LLVMConstNull(neededtype));
+    }
+    b = llvmgen_entry_builder(gctx);
+    sig = LLVMBuildAlloca(b, vtype, "sigvec");
+    LLVMDisposeBuilder(b);
+    b = gctx->curfn->builder;
+    idx[0] = idx[1] = LLVMConstNull(wt);
+    LLVMBuildStore(b, LLVMConstInt(wt, n, 0), LLVMBuildGEP2(b, vtype, sig, idx, 2, ""));
+    for (i = 1, arg = exprseq_head(args); arg != 0; i++, arg = arg->tq_next) {
+        v = llvmgen_expression(gctx, arg, wt);
+        idx[1] = LLVMConstInt(wt, i, 0);
+        LLVMBuildStore(b, v, LLVMBuildGEP2(b, vtype, sig, idx, 2, ""));
+    }
+    cargs[0] = sig;
+    cargs[1] = LLVMConstInt(wt, (unsigned long long) (intptr_t) ctx, 0);
+    v = llvmgen_runtime_call(gctx, "bliss_signal", wt, cargs, 2);
+    if (ctx != 0) {
+        // SIGNAL_STOP has no value
+        if (neededtype != 0) {
+            expr_signal(gctx->ectx, STC__EXPRVALRQ);
+            return LLVMConstNull(neededtype);
+        }
+        return 0;
+    }
+    return llvmgen_adjustval(gctx, v, neededtype, 0);
+
+} /* gen_signal */
+
+/*
+ * gen_setunwind
+ *
+ * SETUNWIND (LRM 17.4.3.3): asks for unwinding when the current
+ * handler returns.
+ */
+static LLVMValueRef
+gen_setunwind (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    LLVMValueRef v;
+
+    if (gctx->curfn == 0) {
+        expr_signal(gctx->ectx, STC__LNKFNRTN, name_string(expr_func_name(exp)));
+        return (neededtype == 0 ? 0 : LLVMConstNull(neededtype));
+    }
+    v = llvmgen_runtime_call(gctx, "bliss_setunwind", gctx->fullwordtype, 0, 0);
+    return llvmgen_adjustval(gctx, v, neededtype, 0);
+
+} /* gen_setunwind */

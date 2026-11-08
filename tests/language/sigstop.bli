@@ -1,0 +1,23 @@
+MODULE sigstop (MAIN = start) =
+BEGIN
+
+! An unhandled severe condition stops the program (LRM 17.6.4.2):
+! the run-time library reports it on stderr and exits with status 1.
+
+EXTERNAL ROUTINE
+    %NAME('printf'),
+    %NAME('fflush');
+
+ROUTINE start =
+BEGIN
+    %NAME('printf') (UPLIT (%ASCIZ %STRING ('before', %CHAR (10))));
+    %NAME('fflush') (0);
+    SIGNAL_STOP (%X'10');
+    %NAME('printf') (UPLIT (%ASCIZ %STRING ('after', %CHAR (10))));
+    0
+END;
+
+END
+ELUDOM
+!! out before
+!! status 1

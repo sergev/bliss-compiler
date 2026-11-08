@@ -192,7 +192,10 @@ name_bind (lexctx_t lctx, void *ctx, quotelevel_t ql, quotemodifier_t qm,
     }
 
     if (ql == QL_MACRO) {
-        if (np == 0 || (is_name(nt) && nt != LEXTYPE_NAME_MAC_PARAM)) {
+        // Unreserved keywords (e.g. CODE) are bound at expansion too:
+        // they can be macro parameters
+        if (np == 0 || (is_name(nt) && nt != LEXTYPE_NAME_MAC_PARAM) ||
+            (!is_name(nt) && (name_flags(np) & NAME_M_RESERVED) == 0)) {
             lex->type = LEXTYPE_UNBOUND;
             lex->boundtype = LEXTYPE_NAME;
             return 0;

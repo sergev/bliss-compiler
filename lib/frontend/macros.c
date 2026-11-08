@@ -1158,14 +1158,15 @@ macro_expand (macroctx_t mctx, name_t *macroname, lexseq_t *result)
             // or set np to NULL to add the actual to %REMAINING.
             if (macro->type == MACRO_KWD) {
                 lt = parser_next(pctx, QL_NAME, &lex);
-                if (lexeme_boundtype(lex) != LEXTYPE_NAME) {
-                    expr_signal(ctx, STC__NAMEEXP);
-                    lexeme_free(lctx, lex);
-                    break;
-                }
+                // The keyword can also be an unreserved keyword, e.g. CODE
                 np = name_search(macro->ptable, lex->text.ptr, lex->text.len, 0);
                 if (np == 0) {
-                    expr_signal(ctx, STC__INTCMPERR, "macro_expand[2]");
+                    expr_signal(ctx, (lexeme_boundtype(lex) == LEXTYPE_NAME
+                                      ? STC__INTCMPERR : STC__NAMEEXP), "macro_expand[2]");
+                    if (lexeme_boundtype(lex) != LEXTYPE_NAME) {
+                        lexeme_free(lctx, lex);
+                        break;
+                    }
                 }
                 lexeme_free(lctx, lex);
                 if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_OP_ASSIGN, 0, 1)) {

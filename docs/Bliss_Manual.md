@@ -1140,12 +1140,58 @@ linkage.
 
 ### Condition handling
 
-- **ENABLE** names a handler routine for a block. `SIGNAL (code, ...)`
-  raises a condition; the handler may continue, resignal, or unwind the
-  stack (`SETUNWIND`). `SIGNAL_STOP` raises a fatal condition. This is
-  like exceptions, built on the VMS condition-handling mechanism.
+Condition handling is BLISS's form of exceptions (LRM 17).
 
-**blissc:** `ENABLE` and `SIGNAL` are not implemented.
+- `ENABLE handler (a, ...)` in the outermost block of a routine makes
+  `handler` its condition handler while it runs, including the routines
+  it calls. The optional actuals are data names; the handler receives
+  their addresses. LOCAL actuals are zeroed first and should be
+  `VOLATILE`.
+- `SIGNAL (cond, p, ...)` raises a condition. The most recently
+  established handler is called with three counted vectors:
+  `sig` (`.sig[1]` is the condition value, then the parameters), `mech`
+  (`mech[3]` is a value to return) and `enbl` (the enable actuals).
+- The handler returns **true** to continue: `SIGNAL` returns `.mech[3]`.
+  It returns **false** to resignal: the next outer handler is tried.
+  It calls `SETUNWIND ()` to **unwind**: every routine down to the
+  handler's establisher is terminated, their handlers are called again
+  with `SS$_UNWIND`, and the establisher returns `.mech[3]`.
+- `SIGNAL_STOP` is `SIGNAL` with a severe condition; it never returns.
+- A condition value has its severity in the low 3 bits: 0 warning,
+  1 success, 2 error, 3 info, 4 severe.
+
+```bliss
+LIBRARY 'chf.lib';                      ! STS$VALUE, STS$MATCH, SS$_UNWIND
+
+LITERAL bad_input = sts$value (severity = sts$k_error, code = 1);
+
+ROUTINE handler (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    IF .sig[1] EQL ss$_unwind THEN RETURN 0;
+    IF sts$match (.sig[1], bad_input)
+    THEN
+        BEGIN
+        mech[3] = -1;                   ! value of parse () after the unwind
+        SETUNWIND ();
+        END;
+    0                                   ! otherwise resignal
+    END;
+
+ROUTINE parse =
+    BEGIN
+    ENABLE handler;
+    ... SIGNAL (bad_input, .pos) ...    ! anywhere below parse
+    0
+    END;
+```
+
+**blissc:** condition handling is in the run-time library `libblissrt.a`
+(`lib/runtime/blissrt.c`); link programs that use `ENABLE` or `SIGNAL`
+with it. `lib/runtime/chf.req` has the condition-value declarations of
+LRM 17.6.1.2 (built as `chf.lib`). An unhandled condition is reported on
+stderr; a severe one then exits with status 1, others continue. Only
+explicit signals exist: hardware errors (e.g. division by zero) are not
+signaled. `SETUNWIND` takes no parameters.
 
 ## 22. Pitfalls for C programmers
 

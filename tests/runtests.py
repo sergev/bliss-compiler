@@ -25,7 +25,7 @@ passed = 0
 failed = 0
 
 
-def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
+def process_test(testfile, blissc, cc, testharness, runtime=None, quiet=False, prefix='!!'):
     if not quiet:
         print("Processing: {}".format(testfile))
     compout = []
@@ -121,7 +121,7 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
     standalone = status is not None or any(not s.startswith('TEST ') for s in runout)
     try:
         subprocess.run([cc, '-o', barename] + ([] if standalone else [testharness]) +
-                       [barename + '.o'], check=True)
+                       [barename + '.o'] + ([runtime] if runtime else []), check=True)
     except subprocess.CalledProcessError as e:
         print(("  FAIL: linking {} into test harness failed" +
               "\n        {}").format(barename + '.o', '\n        '.join([line for line in e.stderr.split('\n')])))
@@ -176,6 +176,7 @@ parser.add_argument('testorsuite', help='test file name or test suite directory'
 parser.add_argument('--blissc', help='location of BLISS compiler', default='blissc')
 parser.add_argument('--harness', help='test harness C file', default=os.path.join(mydir, 'testharness.c'))
 parser.add_argument('--cc', help="C compiler", default=os.getenv("CC") or "cc")
+parser.add_argument('--runtime', help='BLISS run-time library to link with')
 parser.add_argument('--quiet', '-q', action='store_true')
 
 args = parser.parse_args()
@@ -199,7 +200,7 @@ totcases = 0
 totpasses = 0
 for t in tests:
     tried = tried + 1
-    c, p, f = process_test(t, args.blissc, args.cc, args.harness, args.quiet)
+    c, p, f = process_test(t, args.blissc, args.cc, args.harness, args.runtime, args.quiet)
     totcases = totcases + c
     totpasses = totpasses + p
     if f == 0:

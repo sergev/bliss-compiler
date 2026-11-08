@@ -66,6 +66,7 @@ struct llvm_rtntrack_s {
     LLVMValueRef             argblock;  // ARGPTR block: count, args...
     LLVMValueRef             vacopy;    // va_list for reading the block
     LLVMValueRef             gregsave[LLVMGEN_K_MAXREGS]; // GLOBAL REGISTER cells saved on entry
+    LLVMValueRef             enblframe; // ENABLE: condition-handling frame
     int                      varargs;   // must become a varargs function
 };
 typedef struct llvm_rtntrack_s llvm_rtntrack_t;
@@ -222,6 +223,10 @@ void llvmgen_args_to_locals(gencodectx_t gctx, name_t *np);
 LLVMValueRef llvmgen_argcount_global(gencodectx_t gctx);
 LLVMValueRef llvmgen_regcell(gencodectx_t gctx, int regnum);
 LLVMBuilderRef llvmgen_entry_builder(gencodectx_t gctx);
+LLVMValueRef llvmgen_runtime_call(gencodectx_t gctx, const char *name, LLVMTypeRef rettype,
+                                  LLVMValueRef *args, unsigned int nargs);
+// Space for the run-time library's condition-handling frame
+#define LLVMGEN_K_ENBLFRAME     512
 unsigned int llvmgen_callconv(int lnktype);
 void llvmgen_rtn_make_varargs(gencodectx_t gctx, name_t *np);
 void llvmgen_block_begin(gencodectx_t gctx, scopectx_t scope);

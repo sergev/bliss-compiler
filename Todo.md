@@ -3,34 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T8. Condition handling: ENABLE, SIGNAL, SIGNAL_STOP, SETUNWIND
-
-The largest task; VMS-style handlers.
-
-- Runtime: a small C library (`lib/runtime/`) with a per-thread handler
-  stack, `SIGNAL`, `SIGNAL_STOP`, unwind via `setjmp`/`longjmp`.
-- `ENABLE handler (actual, ...)` (LRM 17.2): only in the outermost block of
-  a routine body; actuals are OWN/GLOBAL/FORWARD/LOCAL names (passed by
-  address). Push a frame on entry, pop it on every exit path
-  (`llvm_gencode.c` routine end, `RETURN`, `LEAVE`).
-- `SIGNAL (cond, param, ...)` and `SIGNAL_STOP (...)` are executable
-  functions (LRM 17.3); SIGNAL_STOP never continues the signaller.
-  `SETUNWIND ()` requests an unwind (LRM 17.4.3.3); the one- and
-  two-parameter forms are BLISS-32 only.
-- Handler is called with the signal, mechanism and enable vectors
-  (LRM 17.4). Returning true (low bit 1) continues, false resignals;
-  unwinding is requested with SETUNWIND. The mechanism vector holds a
-  return-value cell for SIGNAL and for the unwound establisher.
-- Condition-value severity: `STS$K_WARNING`=0, `SUCCESS`=1, `ERROR`=2,
-  `INFO`=3, `SEVERE`=4 (LRM 17.6.1); declare these in a library.
-- `blissc` must link or document the runtime library; the test runner
-  links it.
-- UM 9.2 (CALC program) is a complete ENABLE/SIGNAL/SETUNWIND example; its
-  handler takes `SIG [1]` as the condition and matches it with
-  `STS$MATCH`. `STS$VALUE`/`STS$MATCH` and `SS$_...` codes come from the
-  VMS library (STARLET), so provide equivalents in the runtime library.
-- Test: signal caught, resignalled, and unwound.
-
 ## T9. INTERRUPT linkage type
 
 In the LRM, INTERRUPT is a linkage-type, not a routine

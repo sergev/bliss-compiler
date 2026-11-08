@@ -101,6 +101,8 @@ struct routine_attr_s {
     initval_t          *ivlist;
     int                 linkage;    // LNKTYPE_xxx
     name_t             *lnkname;    // linkage name, if given
+    name_t             *enblrtn;    // ENABLE handler routine
+    namereflist_t       enblargs;   // ENABLE actuals
 };
 typedef struct routine_attr_s routine_attr_t;
 

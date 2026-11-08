@@ -1,0 +1,202 @@
+MODULE test =
+BEGIN
+
+! Condition handling (LRM 17): ENABLE, SIGNAL, SIGNAL_STOP, SETUNWIND,
+! continuing, resignaling, unwinding, enable actuals, nested signals,
+! and the condition-value declarations in chf.lib.
+
+LIBRARY 'testharness.lib';
+LIBRARY 'chf.lib';
+
+LITERAL
+    cond_a = sts$value (severity = sts$k_error, code = 1),
+    cond_b = sts$value (severity = sts$k_warning, code = 2),
+    cond_d = sts$value (severity = sts$k_info, code = 4);
+
+OWN
+    unwinds : VOLATILE,                 ! SS$_UNWIND signals seen
+    trail : VOLATILE;                   ! digits of handlers called, in order
+
+ROUTINE note (d) : NOVALUE =
+    trail = .trail * 10 + .d;
+
+! Continues the signaler for cond_a, with value 100 + first parameter
+ROUTINE h_cont (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    note (1);
+    IF sts$match (.sig[1], cond_a)
+    THEN
+        BEGIN
+        mech[3] = 100 + .sig[2];
+        RETURN 1;
+        END;
+    0
+    END;
+
+! Resignals everything
+ROUTINE h_pass (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    IF .sig[1] EQL ss$_unwind
+    THEN
+        BEGIN
+        unwinds = .unwinds + 1;
+        RETURN 0;
+        END;
+    note (2);
+    0
+    END;
+
+! Unwinds for cond_b and severe errors; sets the establisher's value
+ROUTINE h_unwind (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    IF .sig[1] EQL ss$_unwind
+    THEN
+        BEGIN
+        unwinds = .unwinds + 1;
+        mech[3] = 77;
+        RETURN 0;
+        END;
+    note (3);
+    IF sts$match (.sig[1], cond_b) OR (.sig[1] AND 7) EQL sts$k_severe
+    THEN
+        SETUNWIND ();
+    0
+    END;
+
+! Counts calls in the enable actual; continues
+ROUTINE h_count (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    BIND counter = .enbl[1];
+    IF .sig[1] EQL ss$_unwind THEN RETURN 0;
+    counter = .counter + 1;
+    1
+    END;
+
+! Raises a nested signal, which its own establisher must not see again
+ROUTINE h_nested (sig : REF VECTOR, mech : REF VECTOR, enbl : REF VECTOR) =
+    BEGIN
+    IF sts$match (.sig[1], cond_a)
+    THEN
+        BEGIN
+        note (4);
+        mech[3] = SIGNAL (cond_a, 5);   ! handled by h_cont, outside
+        RETURN 1;
+        END;
+    0
+    END;
+
+ROUTINE sig_a (p) = SIGNAL (cond_a, .p);
+
+ROUTINE cont1 =
+    BEGIN
+    ENABLE h_cont;
+    sig_a (7)
+    END;
+
+ROUTINE pass1 =
+    BEGIN
+    ENABLE h_pass;
+    sig_a (8)
+    END;
+
+ROUTINE cont_outer =
+    BEGIN
+    ENABLE h_cont;
+    pass1 ()
+    END;
+
+ROUTINE deep =
+    BEGIN
+    ENABLE h_pass;                      ! terminated by the unwind
+    SIGNAL (cond_b);
+    1
+    END;
+
+ROUTINE middle =
+    BEGIN
+    ENABLE h_pass;
+    deep ();
+    2
+    END;
+
+ROUTINE unwind_outer =
+    BEGIN
+    ENABLE h_unwind;
+    middle ();
+    3
+    END;
+
+ROUTINE stop1 =
+    BEGIN
+    ENABLE h_unwind;
+    SIGNAL_STOP (cond_a);               ! made severe; h_unwind unwinds
+    4
+    END;
+
+ROUTINE count1 =
+    BEGIN
+    LOCAL n : VOLATILE;
+    ENABLE h_count (n);
+    SIGNAL (cond_d);
+    SIGNAL (cond_d);
+    .n
+    END;
+
+ROUTINE nested_inner =
+    BEGIN
+    ENABLE h_nested;
+    SIGNAL (cond_a, 1)
+    END;
+
+ROUTINE nested1 =
+    BEGIN
+    ENABLE h_cont;
+    nested_inner ()
+    END;
+
+test_setup(numcases=7);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    CASE .caseno FROM 1 TO 7 OF
+    SET
+        [1] : BEGIN
+            trail = 0;
+            test_output(.caseno, 'continue=%ld,%ld', cont1 (), .trail);
+        END;
+!! 1 continue=107,1
+        [2] : BEGIN
+            trail = 0;
+            test_output(.caseno, 'resignal=%ld,%ld', cont_outer (), .trail);
+        END;
+!! 2 resignal=108,21
+        [3] : BEGIN
+            ! deep's and middle's handlers resignal cond_b; unwind_outer's
+            ! unwinds: all three handlers then see SS$_UNWIND
+            trail = 0;
+            unwinds = 0;
+            test_output(.caseno, 'unwind=%ld,%ld,%ld', unwind_outer (), .trail, .unwinds);
+        END;
+!! 3 unwind=77,223,3
+        [4] : BEGIN
+            unwinds = 0;
+            test_output(.caseno, 'stop=%ld,%ld', stop1 (), .unwinds);
+        END;
+!! 4 stop=77,1
+        [5] : test_output(.caseno, 'enable=%ld', count1 ());
+!! 5 enable=2
+        [6] : BEGIN
+            trail = 0;
+            test_output(.caseno, 'nested=%ld,%ld', nested1 (), .trail);
+        END;
+!! 6 nested=105,41
+        [7] : BEGIN
+            ! No handler: reported on stderr, and a warning continues
+            test_output(.caseno, 'unhandled=%ld', SIGNAL (cond_b, 9) + 1);
+        END;
+!! 7 unhandled=1
+    TES;
+END;
+
+END
+ELUDOM

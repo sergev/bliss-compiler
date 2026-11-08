@@ -109,6 +109,108 @@ llvmgen_entry_builder (gencodectx_t gctx)
 } /* llvmgen_entry_builder */
 
 /*
+ * llvmgen_runtime_call
+ *
+ * Calls a run-time library routine (blissrt) taking pointer or
+ * fullword arguments.
+ */
+LLVMValueRef
+llvmgen_runtime_call (gencodectx_t gctx, const char *name, LLVMTypeRef rettype,
+                      LLVMValueRef *args, unsigned int nargs)
+{
+    LLVMTypeRef argtypes[8], ftype;
+    LLVMValueRef fn;
+    unsigned int i;
+
+    for (i = 0; i < nargs && i < 8; i++) argtypes[i] = LLVMTypeOf(args[i]);
+    ftype = LLVMFunctionType(rettype, argtypes, nargs, 0);
+    fn = LLVMGetNamedFunction(gctx->module, name);
+    if (fn == 0) fn = LLVMAddFunction(gctx->module, name, ftype);
+    return LLVMBuildCall2(gctx->curfn->builder, ftype, fn, args, nargs, "");
+
+} /* llvmgen_runtime_call */
+
+/*
+ * enable_prologue
+ *
+ * ENABLE (LRM 17.2): builds the enable vector (count, then the address
+ * of each enable-actual, LOCALs zeroed), sets the unwind point with
+ * setjmp and establishes the handler. An unwind returns to the unwind
+ * point with a nonzero value; the routine then returns the value the
+ * handler left in the mechanism vector.
+ */
+static void
+enable_prologue (gencodectx_t gctx, name_t *np)
+{
+    routine_attr_t *attr = rtnsym_attr(np);
+    int novalue = ((attr->flags & SYM_M_NOVALUE) != 0);
+    llvm_rtntrack_t *rt = gctx->curfn;
+    LLVMBuilderRef b = rt->builder;
+    LLVMContextRef lctx = gctx->llvmctx;
+    LLVMTypeRef ptrtype = LLVMPointerTypeInContext(lctx, 0);
+    LLVMTypeRef i32type = LLVMInt32TypeInContext(lctx);
+    LLVMTypeRef wt = gctx->fullwordtype;
+    unsigned int nargs = namereflist_length(&attr->enblargs), i;
+    LLVMTypeRef vtype = LLVMArrayType(wt, nargs + 1), sjtype;
+    LLVMValueRef enbl, idx[2], v, args[3], sjfn, sj;
+    LLVMBasicBlockRef unwound, cont;
+    nameref_t *ref;
+
+    rt->enblframe = LLVMBuildAlloca(b, LLVMArrayType(LLVMInt8TypeInContext(lctx),
+                                                     LLVMGEN_K_ENBLFRAME), "enblframe");
+    LLVMSetAlignment(rt->enblframe, 16);
+    enbl = LLVMBuildAlloca(b, vtype, "enblvec");
+    idx[0] = idx[1] = LLVMConstNull(wt);
+    LLVMBuildStore(b, LLVMConstInt(wt, nargs, 0), LLVMBuildGEP2(b, vtype, enbl, idx, 2, ""));
+    for (i = 1, ref = namereflist_head(&attr->enblargs); ref != 0; i++, ref = ref->tq_next) {
+        llvm_stgclass_t sc;
+        LLVMTypeRef t;
+        v = llvmgen_segaddress(gctx, ref->np, &sc, 0, &t);
+        if (sc == LLVM_LOCAL && t != 0) {
+            LLVMBuildStore(b, LLVMConstNull(t), v);
+        }
+        idx[1] = LLVMConstInt(wt, i, 0);
+        LLVMBuildStore(b, LLVMBuildPtrToInt(b, v, wt, ""), LLVMBuildGEP2(b, vtype, enbl, idx, 2, ""));
+    }
+
+    // setjmp returns twice: 0 now, 1 after an unwind
+    sjtype = LLVMFunctionType(i32type, &ptrtype, 1, 0);
+    sjfn = LLVMGetNamedFunction(gctx->module, "_setjmp");
+    if (sjfn == 0) {
+        sjfn = LLVMAddFunction(gctx->module, "_setjmp", sjtype);
+        LLVMAddAttributeAtIndex(sjfn, LLVMAttributeFunctionIndex,
+                                LLVMCreateEnumAttribute(lctx,
+                                    LLVMGetEnumAttributeKindForName("returns_twice", 13), 0));
+    }
+    sj = LLVMBuildCall2(b, sjtype, sjfn, &rt->enblframe, 1, "");
+    LLVMAddCallSiteAttribute(sj, LLVMAttributeFunctionIndex,
+                             LLVMCreateEnumAttribute(lctx,
+                                 LLVMGetEnumAttributeKindForName("returns_twice", 13), 0));
+    unwound = LLVMAppendBasicBlockInContext(lctx, rt->func, llvmgen_label(gctx));
+    cont = LLVMAppendBasicBlockInContext(lctx, rt->func, llvmgen_label(gctx));
+    LLVMBuildCondBr(b, LLVMBuildICmp(b, LLVMIntNE, sj, LLVMConstNull(i32type), ""), unwound, cont);
+
+    LLVMPositionBuilderAtEnd(b, unwound);
+    for (i = 0; i < LLVMGEN_K_MAXREGS; i++) {
+        if (rt->gregsave[i] != 0) LLVMBuildStore(b, rt->gregsave[i], llvmgen_regcell(gctx, (int) i));
+    }
+    v = llvmgen_runtime_call(gctx, "bliss_unwound_value", wt, &rt->enblframe, 1);
+    if (novalue) {
+        LLVMBuildRetVoid(b);
+    } else {
+        LLVMBuildRet(b, v);
+    }
+
+    LLVMPositionBuilderAtEnd(b, cont);
+    args[0] = rt->enblframe;
+    args[1] = llvmgen_rtntype_info(gctx, attr->enblrtn, 0, 0);
+    args[2] = enbl;
+    if (args[1] == 0) args[1] = LLVMConstNull(ptrtype);
+    llvmgen_runtime_call(gctx, "bliss_establish", LLVMVoidTypeInContext(lctx), args, 3);
+
+} /* enable_prologue */
+
+/*
  * gencode_routine_begin
  *
  * Sets up the tracking structure for generating code in a routine
@@ -174,10 +276,17 @@ gencode_routine_end (gencodectx_t gctx, name_t *np)
     unsigned int i;
 
     LLVMPositionBuilderAtEnd(rt->builder, LLVMGetEntryBasicBlock(thisfn));
+    if (attr->enblrtn != 0) {
+        enable_prologue(gctx, np);
+    }
     val = llvmgen_expression(gctx, rtnexpr, (novalue ? 0 : gctx->fullwordtype));
     llvmgen_btrack_update(gctx, rt->btrack[LLVMGEN_K_BT_FUNC], (novalue ? 0 : val));
     val = llvmgen_btrack_finalize(gctx, rt->btrack[LLVMGEN_K_BT_FUNC],
                                   (novalue ? 0 : gctx->fullwordtype));
+    if (rt->enblframe != 0) {
+        llvmgen_runtime_call(gctx, "bliss_revert", LLVMVoidTypeInContext(gctx->llvmctx),
+                             &rt->enblframe, 1);
+    }
     // Restore the GLOBAL REGISTER cells this routine declared
     for (i = 0; i < LLVMGEN_K_MAXREGS; i++) {
         if (rt->gregsave[i] != 0) {
