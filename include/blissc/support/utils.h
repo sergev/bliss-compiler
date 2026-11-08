@@ -169,8 +169,10 @@ static inline __attribute__((unused)) enttype_ * pfx_##_remove (hdrtype_ *h, ent
     enttype_ *p = h->tq_head; if (p == 0) return 0; \
     if (h->tq_count == 1) { if (p != e) return 0; \
         h->tq_head = h->tq_tail = 0; h->tq_count = 0; return e; } \
-    while (p->tq_next != e) { p = p->tq_next; } \
-    p->tq_next = e->tq_next; h->tq_count -= 1; \
+    if (p == e) { h->tq_head = e->tq_next; e->tq_next = 0; h->tq_count -= 1; return e; } \
+    while (p->tq_next != 0 && p->tq_next != e) { p = p->tq_next; } \
+    if (p->tq_next == 0) return 0; \
+    p->tq_next = e->tq_next; e->tq_next = 0; h->tq_count -= 1; \
     if (h->tq_tail == e) h->tq_tail = p; \
     return e; } \
 static inline __attribute__((unused)) enttype_ * pfx_##_remtail (hdrtype_ *h) { \
