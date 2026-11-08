@@ -437,6 +437,10 @@ lexemes_match (lexseq_t *a, lexseq_t *b)
     }
     for (la = lexseq_head(a), lb = lexseq_head(b); la != 0;
          la = la->tq_next, lb = lb->tq_next) {
+        // A quoted string never matches a name or number with the same text
+        if ((lexeme_boundtype(la) == LEXTYPE_STRING) != (lexeme_boundtype(lb) == LEXTYPE_STRING)) {
+            return 0;
+        }
         if (!strings_eql(&la->text, &lb->text)) {
             return 0;
         }

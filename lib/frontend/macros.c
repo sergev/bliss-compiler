@@ -1222,6 +1222,23 @@ macro_expand (macroctx_t mctx, name_t *macroname, lexseq_t *result)
             return 1;
         }
 
+        // An empty list, "()", has no actual-parameters
+        if (nactuals == 1 && lexseq_length(&extras) == 0 && namereflist_length(&macro->plist) == 0) {
+            nactuals = 0;
+        }
+
+        // A conditional macro expands to nothing if given too few
+        // actuals, or none at all when it has no formals (LRM 16.3.3.3)
+        if (macro->type == MACRO_COND &&
+            (nactuals < namereflist_length(&macro->plist) ||
+             (nactuals == 0 && namereflist_length(&macro->plist) == 0))) {
+            lexseq_free(lctx, &extras);
+            scope_end(expscope);
+            free(curexp);
+            parser_punctclass_set(pctx, pcl, psep);
+            return 1;
+        }
+
         if (nactuals < namereflist_length(&macro->plist)) {
             name_t *anp;
             while (formal != 0) {
