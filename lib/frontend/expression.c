@@ -870,8 +870,22 @@ parse_block (expr_ctx_t ctx, lextype_t curlt, expr_node_t **expp,
             // (as far as we know at compile time)
             valexp = exp;
             exprseq_instail(&seq, exp);
+            lt = parser_next(pctx, QL_NORMAL, &lex);
+        } else {
+            // Parse failed: make progress to avoid looping forever
+            lt = parser_next(pctx, QL_NORMAL, &lex);
+            if (lt == LEXTYPE_END || lt == LEXTYPE_NONE) {
+                expr_signal(ctx, STC__EXPREXP);
+                lexeme_free(ctx->lctx, lex);
+                endpos = parser_curpos(pctx);
+                break;
+            }
+            if (lt != LEXTYPE_DELIM_SEMI && lt != closer) {
+                expr_signal(ctx, STC__EXPREXP);
+                lexeme_free(ctx->lctx, lex);
+                lt = parser_next(pctx, QL_NORMAL, &lex);
+            }
         }
-        lt = parser_next(pctx, QL_NORMAL, &lex);
         // Semicolon separator also discards the value
         if (lt == LEXTYPE_DELIM_SEMI) {
             valexp = 0;
