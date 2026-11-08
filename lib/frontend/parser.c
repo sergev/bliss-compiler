@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "blissc/parser.h"
 #include "blissc/lexer.h"
 #include "blissc/libgen.h"
@@ -58,7 +59,7 @@ struct parse_ctx_s {
     DODEF(ASCIC, parse_string_literal) \
     DODEF(ASCIZ, parse_string_literal) DODEF(ASCID, parse_ASCID) \
     DODEF(E, parse_float_literal) DODEF(D, parse_float_literal) \
-    DODEF(G, parse_float_literal) \
+    DODEF(G, parse_float_literal) DODEF(H, parse_float_literal) \
     DODEF(B, parse_numeric_literal) \
     DODEF(O, parse_numeric_literal) \
     DODEF(DECIMAL, parse_numeric_literal) \
@@ -1291,7 +1292,8 @@ parse_string_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t cu
  *
  * %E'mantissa{E exponent}', %D'...{D exponent}', %G'...{G exponent}'
  * (LRM 4.2): the bit pattern of an IEEE single (%E) or double (%D, %G)
- * as a numeric literal.
+ * as a numeric literal. %H'...{Q exponent}' is an IEEE quad: 16 bytes,
+ * as a string literal, so it fits only in a PLIT or INITIAL.
  */
 static int
 parse_float_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t curlt)
@@ -1304,7 +1306,8 @@ parse_float_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t cur
     int ok = (lt == LEXTYPE_STRING && str->len > 0 && str->len < sizeof(buf));
     long bits = 0;
 
-    expchar = (curlt == LEXTYPE_LXF_E ? 'E' : curlt == LEXTYPE_LXF_D ? 'D' : 'G');
+    expchar = (curlt == LEXTYPE_LXF_E ? 'E' : curlt == LEXTYPE_LXF_D ? 'D'
+               : curlt == LEXTYPE_LXF_G ? 'G' : 'Q');
     if (ok) {
         // Mantissa: sign, digits, point; then the exponent letter
         for (i = 0, p = buf; i < str->len; i++) {
@@ -1318,6 +1321,34 @@ parse_float_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t cur
             *p++ = c;
         }
         *p = '\0';
+    }
+    if (ok && curlt == LEXTYPE_LXF_H) {
+        // From a long double (64-bit significand) to binary128
+        long double v = strtold(buf, &end);
+        unsigned long long lo = 0, hi = 0, frac;
+        unsigned char bytes[16];
+        strdesc_t bstr;
+        int e;
+        ok = (*end == '\0' && end != buf && v - v == 0);
+        if (ok && v != 0) {
+            long double m = frexpl(v < 0 ? -v : v, &e);
+            long bexp = e - 1 + 16383;
+            frac = (unsigned long long) ldexpl(m, 64) << 1;  // drop the leading 1
+            ok = (bexp > 0 && bexp < 32767);
+            hi = ((unsigned long long) bexp << 48) | (frac >> 16);
+            lo = frac << 48;
+        }
+        if (v < 0 || (v == 0 && buf[0] == '-')) hi |= 1ULL << 63;
+        if (!ok) {
+            log_signal(pctx->logctx, pctx->curpos, STC__FLTLITERR, str);
+            lo = hi = 0;
+        }
+        memcpy(bytes, &lo, 8);
+        memcpy(bytes + 8, &hi, 8);
+        strdesc_init(&bstr, (char *) bytes, sizeof(bytes));
+        parser_lexeme_add(pctx, LEXTYPE_STRING, &bstr);
+        lexeme_free(pctx->lmemctx, lex);
+        return 1;
     }
     if (ok) {
         if (curlt == LEXTYPE_LXF_E) {

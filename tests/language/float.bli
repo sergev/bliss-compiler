@@ -10,7 +10,8 @@ BUILTIN
     ADDF, SUBF, MULF, DIVF, CMPF,
     ADDD, SUBD, MULD, DIVD, CMPD,
     ADDG, SUBG, MULG, DIVG, CMPG,
-    CVTFD, CVTDF, CVTFL, CVTRFL, CVTDL, CVTRDL, CVTGL, CVTLF, CVTLD, CVTLG, CVTFG, CVTGF;
+    CVTFD, CVTDF, CVTFL, CVTRFL, CVTDL, CVTRDL, CVTGL, CVTLF, CVTLD, CVTLG, CVTFG, CVTGF,
+    ADDH, SUBH, MULH, DIVH, CMPH, CVTFH, CVTHF, CVTGH, CVTHG, CVTLH, CVTHL, CVTRHL;
 
 OWN
     fa : LONG INITIAL (LONG (%E'1.5')),
@@ -27,14 +28,19 @@ OWN
     big : INITIAL (%D'1.0D40'),
     huge : INITIAL (%D'1.0D300'),
     neg : LONG INITIAL (LONG (%E'-2.5')),
-    five : LONG INITIAL (LONG (-5));
+    five : LONG INITIAL (LONG (-5)),
+    ! H: IEEE quad, two fullwords (an octaword)
+    ha : VECTOR [2] INITIAL (%H'1.5'),
+    hb : VECTOR [2] INITIAL (%H'-2.0Q1'),
+    hc : VECTOR [2],
+    hbig : VECTOR [2] INITIAL (%H'1.0Q400');
 
-test_setup(numcases=6);
+test_setup(numcases=8);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL r1, r2, r3, r4;
-    CASE .caseno FROM 1 TO 6 OF
+    CASE .caseno FROM 1 TO 8 OF
     SET
         [1] : BEGIN
             ! SUBx (subtrahend, minuend, dst), DIVx (divisor, dividend, quot)
@@ -85,6 +91,24 @@ BEGIN
                         CVTRFL (fa, lr));
         END;
 !! 6 overflow=0,2147483647,0,1,1
+        [7] : BEGIN
+            ADDH (ha, hb, hc);              ! -18.5
+            CVTRHL (hc, lr); r1 = .lr;
+            DIVH (ha, hb, hc);              ! -20 / 1.5
+            CVTHL (hc, ld); r2 = .ld;
+            test_output(.caseno, 'H=%lx,%lx,%ld,%ld,%ld,%ld', .ha[1], .ha[0], .r1<0, 32, 1>,
+                        .r2<0, 32, 1>, CMPH (ha, hb), CMPH (ha, ha));
+        END;
+!! 7 H=3fff800000000000,0,-19,-13,1,0
+        [8] : BEGIN
+            CVTLH (five, hc);
+            CVTHF (hc, fc); r1 = .fc;
+            CVTFH (fa, hc);
+            CVTHG (hc, gc); r2 = .gc;
+            r3 = CVTHG (hbig, gc);
+            test_output(.caseno, 'Hcvt=%lx,%lx,%ld,%ld', .r1, .r2, .r3, CVTHG (hb, gc));
+        END;
+!! 8 Hcvt=c0a00000,3ff8000000000000,0,1
     TES;
 END;
 

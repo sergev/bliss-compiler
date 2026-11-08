@@ -179,7 +179,7 @@ Relational operators yield `1` (true) or `0` (false). Tests (`IF`,
 | `%X'...'` | hexadecimal | `%X'FF'` = 255 |
 | `%DECIMAL'...'` | decimal (explicit) | `%DECIMAL'-12'` |
 | `%C'c'` | character code | `%C'A'` = 65 |
-| `%E'...'`, `%D'...'`, `%G'...'`, `%H'...'` | floating point (VAX formats) | `%E'1.5'` |
+| `%E'...'`, `%D'...'`, `%G'...'`, `%H'...'` | floating point (IEEE in blissc) | `%E'1.5'` |
 
 `%B`, `%O`, `%X`, `%DECIMAL` may have a sign inside the quotes:
 `%B'-1111'` = -15.
@@ -189,8 +189,9 @@ BLISS has no float arithmetic operators. The exponent letter matches the
 type: `%E'2.5E-3'`, `%D'1.0D10'`, `%G'1.0G10'`, `%H'1.0Q10'`.
 
 **blissc:** `%E` is an IEEE single (32 bits, e.g. `%E'1.5'` =
-`%X'3FC00000'`), `%D` and `%G` are IEEE doubles. `%H` is not supported
-yet. Store `%E` values in `LONG` data: `INITIAL (LONG (%E'1.5'))`.
+`%X'3FC00000'`), `%D` and `%G` are IEEE doubles, `%H` is an IEEE quad
+(16 bytes, so only in a PLIT or `INITIAL`, e.g. `VECTOR [2] INITIAL
+(%H'1.5')`). Store `%E` values in `LONG` data: `INITIAL (LONG (%E'1.5'))`.
 
 ### Strings
 
@@ -1120,7 +1121,8 @@ PROBER (mode, %REF (.len), .p)  ! a value is passed as %REF (value)
 **blissc** has the floating-point ones: `ADDx`, `SUBx`, `MULx`, `DIVx`
 (`SUBx (a, b, dst)` stores `b - a`; `DIVx (a, b, dst)` stores `b / a`) and
 `CMPx` (-1, 0 or 1), for x = `F` (IEEE single, in a `LONG`), `D` and `G`
-(IEEE double, in a fullword):
+(IEEE double, in a fullword) and `H` (IEEE quad, two fullwords; done in
+software by libgcc):
 
 ```bliss
 BUILTIN ADDF, CMPF;
@@ -1131,9 +1133,10 @@ CMPF (a, b)                             ! -1
 
 Conversions `CVTxy (src, dst)` go between `F`, `D`, `G` and `L` or `I`
 (a signed `LONG`): `CVTFD`, `CVTDF`, `CVTFG`, `CVTGF`, `CVTFL`, `CVTDL`,
-`CVTGL`, `CVTFI`, `CVTDI`, `CVTLF`, `CVTLD`, `CVTLG`, `CVTIF`, `CVTID`.
-To an integer they truncate; `CVTRFL`, `CVTRDL`, `CVTRGL` round half away
-from zero. Conversions that can overflow (to an integer, or to `F`)
+`CVTGL`, `CVTFI`, `CVTDI`, `CVTLF`, `CVTLD`, `CVTLG`, `CVTIF`, `CVTID`, and
+for `H`: `CVTFH`, `CVTHF`, `CVTGH`, `CVTHG`, `CVTLH`, `CVTHL`. To an
+integer they truncate; `CVTRFL`, `CVTRDL`, `CVTRGL`, `CVTRHL` round half
+away from zero. Conversions that can overflow (to an integer, or to `F`)
 return 1, or 0 on overflow (an integer result then saturates).
 
 ## 21. Linkages and condition handling
