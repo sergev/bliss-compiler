@@ -1,0 +1,253 @@
+MODULE test =
+BEGIN
+
+! Control expressions: IF, CASE, SELECT*, loops, EXITLOOP, LEAVE, RETURN.
+
+LIBRARY 'testharness.lib';
+
+ROUTINE ifval (x) =
+    IF .x LSS 0 THEN -1 ELSE IF .x EQL 0 THEN 0 ELSE 1;
+
+ROUTINE casefn (x) =
+    CASE .x FROM 1 TO 5 OF
+    SET
+    [1]:            10;
+    [2, 3]:         23;
+    [4 TO 5]:       45;
+    [OUTRANGE]:     -1;
+    TES;
+
+ROUTINE caseinr (x) =
+    CASE .x FROM 0 TO 9 OF
+    SET
+    [0]:            100;
+    [INRANGE]:      200;
+    [OUTRANGE]:     300;
+    TES;
+
+ROUTINE sel1 (x) =
+    SELECTONE .x OF
+    SET
+    [1, 2]:         12;
+    [3 TO 7]:       37;
+    [%C'a']:        97;
+    [OTHERWISE]:    0;
+    TES;
+
+ROUTINE sel1nomatch (x) =
+    SELECTONE .x OF
+    SET
+    [1]:            1;
+    TES;
+
+ROUTINE selall (x) =
+BEGIN
+    LOCAL r;
+    r = 0;
+    SELECT .x OF
+    SET
+    [1 TO 10]:      r = .r + 1;
+    [5 TO 20]:      r = .r + 10;
+    [5]:            r = .r + 100;
+    [OTHERWISE]:    r = .r + 1000;
+    [ALWAYS]:       r = .r + 10000;
+    TES;
+    .r
+END;
+
+ROUTINE selu (x) =
+    SELECTONEU .x OF
+    SET
+    [0 TO 9]:       1;
+    [OTHERWISE]:    2;
+    TES;
+
+ROUTINE selexp (x, y) =
+    SELECTONE .x OF
+    SET
+    [.y]:           1;
+    [.y + 1]:       2;
+    [OTHERWISE]:    3;
+    TES;
+
+ROUTINE early (x) =
+BEGIN
+    IF .x GTR 10 THEN RETURN 1;
+    INCR i FROM 0 TO .x DO
+        IF .i EQL 5 THEN RETURN 2;
+    3
+END;
+
+test_setup(numcases=30);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL v, n;
+
+    CASE .caseno FROM 1 TO 30 OF
+    SET
+        [1] : test_output(.caseno, 'if=%ld,%ld,%ld', ifval(-5), ifval(0), ifval(9));
+!! 1 if=-1,0,1
+        [2] : test_output(.caseno, 'case=%ld,%ld,%ld,%ld,%ld',
+                casefn(1), casefn(3), casefn(5), casefn(0), casefn(6));
+!! 2 case=10,23,45,-1,-1
+        [3] : test_output(.caseno, 'inrange=%ld,%ld,%ld', caseinr(0), caseinr(7), caseinr(10));
+!! 3 inrange=100,200,300
+        [4] : test_output(.caseno, 'selone=%ld,%ld,%ld,%ld',
+                sel1(2), sel1(5), sel1(%C'a'), sel1(8));
+!! 4 selone=12,37,97,0
+        [5] : test_output(.caseno, 'nomatch=%ld', sel1nomatch(2));
+!! 5 nomatch=-1
+        [6] : test_output(.caseno, 'select=%ld,%ld,%ld,%ld',
+                selall(1), selall(5), selall(15), selall(50));
+!! 6 select=10001,10111,10010,11000
+        [7] : test_output(.caseno, 'selu=%ld,%ld', selu(3), selu(-1));
+!! 7 selu=1,2
+        [8] : test_output(.caseno, 'selexp=%ld,%ld,%ld', selexp(4, 4), selexp(5, 4), selexp(9, 4));
+!! 8 selexp=1,2,3
+        [9] : BEGIN
+            v = 0;
+            INCR i FROM 1 TO 10 DO v = .v + .i;
+            test_output(.caseno, 'incr=%ld', .v);
+        END;
+!! 9 incr=55
+        [10] : BEGIN
+            v = 0;
+            DECR i FROM 10 TO 1 BY 3 DO v = .v * 100 + .i;
+            test_output(.caseno, 'decr=%ld', .v);
+        END;
+!! 10 decr=10070401
+        [11] : BEGIN
+            v = 0;
+            INCR i FROM 5 TO 1 DO v = .v + 1;
+            test_output(.caseno, 'emptyincr=%ld', .v);
+        END;
+!! 11 emptyincr=0
+        [12] : BEGIN
+            v = 0;
+            INCRU i FROM 0 TO 3 DO v = .v + .i;
+            DECRU i FROM 3 TO 1 DO v = .v + .i;
+            test_output(.caseno, 'incru=%ld', .v);
+        END;
+!! 12 incru=12
+        [13] : BEGIN
+            v = (INCR i FROM 1 TO 3 DO 0);
+            test_output(.caseno, 'loopval=%ld', .v);
+        END;
+!! 13 loopval=-1
+        [14] : BEGIN
+            v = (INCR i FROM 1 TO 100 DO IF .i * .i GTR 50 THEN EXITLOOP .i);
+            test_output(.caseno, 'exitloop=%ld', .v);
+        END;
+!! 14 exitloop=8
+        [15] : BEGIN
+            n = 0;
+            v = (WHILE 1 DO (n = .n + 1; IF .n GEQ 4 THEN EXITLOOP 77));
+            test_output(.caseno, 'whileexit=%ld,%ld', .v, .n);
+        END;
+!! 15 whileexit=77,4
+        [16] : BEGIN
+            n = 0;
+            UNTIL .n GEQ 7 DO n = .n + 2;
+            test_output(.caseno, 'until=%ld', .n);
+        END;
+!! 16 until=8
+        [17] : BEGIN
+            n = 100;
+            DO n = .n + 1 WHILE .n LSS 5;
+            test_output(.caseno, 'dowhile=%ld', .n);
+        END;
+!! 17 dowhile=101
+        [18] : BEGIN
+            n = 0;
+            WHILE .n LSS 0 DO n = 99;
+            test_output(.caseno, 'whilepre=%ld', .n);
+        END;
+!! 18 whilepre=0
+        [19] : BEGIN
+            v = 0;
+            INCR i FROM 1 TO 3 DO
+                INCR j FROM 1 TO 3 DO
+                BEGIN
+                    IF .j GTR .i THEN EXITLOOP;
+                    v = .v + 1;
+                END;
+            test_output(.caseno, 'nested=%ld', .v);
+        END;
+!! 19 nested=6
+        [20] : BEGIN
+            LABEL blk;
+            v = (blk: BEGIN
+                INCR i FROM 1 TO 10 DO
+                    IF .i EQL 4 THEN LEAVE blk WITH .i * 11;
+                0
+            END);
+            test_output(.caseno, 'leavewith=%ld', .v);
+        END;
+!! 20 leavewith=44
+        [21] : BEGIN
+            LABEL outer, inner;
+            v = 0;
+            outer: BEGIN
+                inner: BEGIN
+                    v = 1;
+                    LEAVE outer;
+                END;
+                v = 2;
+            END;
+            test_output(.caseno, 'leaveouter=%ld', .v);
+        END;
+!! 21 leaveouter=1
+        [22] : test_output(.caseno, 'return=%ld,%ld,%ld', early(20), early(9), early(3));
+!! 22 return=1,2,3
+        [23] : BEGIN
+            v = (n = 5; .n * 2);
+            test_output(.caseno, 'blockval=%ld', .v);
+        END;
+!! 23 blockval=10
+        [24] : BEGIN
+            v = BEGIN LOCAL t; t = 6; .t * 7 END;
+            test_output(.caseno, 'beginval=%ld', .v);
+        END;
+!! 24 beginval=42
+        [25] : BEGIN
+            v = (IF 0 THEN 1 ELSE 2) + (IF 1 THEN 10 ELSE 20);
+            test_output(.caseno, 'ifexpr=%ld', .v);
+        END;
+!! 25 ifexpr=12
+        [26] : BEGIN
+            v = 0;
+            INCR i FROM 0 TO 20 BY 5 DO v = .v + 1;
+            test_output(.caseno, 'by=%ld', .v);
+        END;
+!! 26 by=5
+        [27] : BEGIN
+            v = 0;
+            INCRA p FROM 100 TO 108 BY 4 DO v = .v + .p;
+            test_output(.caseno, 'incra=%ld', .v);
+        END;
+!! 27 incra=312
+        [28] : BEGIN
+            LOCAL a : VECTOR [5];
+            INCR i FROM 0 TO 4 DO a[.i] = .i * .i;
+            v = 0;
+            DECR i FROM 4 TO 0 DO v = .v * 10 + .a[.i] MOD 10;
+            test_output(.caseno, 'vecloop=%ld', .v);
+        END;
+!! 28 vecloop=69410
+        [29] : BEGIN
+            n = 0;
+            v = (WHILE .n LSS 10 DO n = .n + 1);
+            test_output(.caseno, 'whileval=%ld,%ld', .v, .n);
+        END;
+!! 29 whileval=-1,10
+        [30] : BEGIN
+            v = (CASE 2 FROM 1 TO 3 OF SET [1]: 5; [2]: 6; [3]: 7; TES);
+            test_output(.caseno, 'constcase=%ld', .v);
+        END;
+!! 30 constcase=6
+    TES;
+END;
+
+END
+ELUDOM
