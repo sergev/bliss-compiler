@@ -803,7 +803,7 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
                       LLVMVoidTypeInContext(gctx->llvmctx));
     if (proto_only) {
         // fastcc (JSB) cannot be varargs; calls give the real argument types
-        lr->type = LLVMFunctionType(lr->returntype, 0, 0, attr->linkage != LNKTYPE_JSB);
+        lr->type = LLVMFunctionType(lr->returntype, 0, 0, attr->linkage == LNKTYPE_CALL);
         lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
         LLVMSetFunctionCallConv(lr->func, llvmgen_callconv(attr->linkage));
         if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(lr->func, LLVMExternalWeakLinkage);
@@ -842,6 +842,10 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     for (i = 0, ref = namereflist_head(&attr->inargs); i < argcount; i++, ref = ref->tq_next) {
         argtypes[i] = gendatatype(gctx, datasym_attr(ref->np), 0);
     }
+    if (attr->linkage == LNKTYPE_INTERRUPT && argcount > 0) {
+        // x86_intrcc: the frame is passed by address (byval)
+        argtypes[0] = LLVMPointerTypeInContext(gctx->llvmctx, 0);
+    }
     // XXX need machine-specific VARARG linkage attribute
     lr->type = LLVMFunctionType(lr->returntype, argtypes, argcount, 0);
     if (extantfn != 0) {
@@ -849,6 +853,13 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     }
     lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
     LLVMSetFunctionCallConv(lr->func, llvmgen_callconv(attr->linkage));
+    if (attr->linkage == LNKTYPE_INTERRUPT && argcount > 0) {
+        // Interrupt frame: RIP, CS, RFLAGS, RSP, SS
+        LLVMTypeRef frametype = LLVMArrayType(gctx->fullwordtype, 5);
+        LLVMAddAttributeAtIndex(lr->func, 1,
+            LLVMCreateTypeAttribute(gctx->llvmctx,
+                                    LLVMGetEnumAttributeKindForName("byval", 5), frametype));
+    }
     if (extantfn != 0) {
         LLVMReplaceAllUsesWith(extantfn, lr->func);
         LLVMDeleteFunction(extantfn);
@@ -1001,7 +1012,9 @@ llvmgen_args_to_locals (gencodectx_t gctx, name_t *np)
 unsigned int
 llvmgen_callconv (int lnktype)
 {
-    return (lnktype == LNKTYPE_JSB ? LLVMFastCallConv : LLVMCCallConv);
+    return (lnktype == LNKTYPE_JSB ? LLVMFastCallConv
+            : lnktype == LNKTYPE_INTERRUPT ? LLVMX86INTRCallConv
+            : LLVMCCallConv);
 
 } /* llvmgen_callconv */
 

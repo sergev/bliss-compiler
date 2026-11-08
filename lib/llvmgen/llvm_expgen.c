@@ -337,6 +337,10 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     } else {
         cc = LLVMCCallConv;
     }
+    if (cc == LLVMX86INTRCallConv) {
+        log_signal(expr_logctx(gctx->ectx), expr_textpos(exp), STC__INTRCALL);
+        return (neededtype == 0 ? 0 : LLVMConstNull(neededtype));
+    }
     if (cc != LLVMCCallConv) {
         // fastcc cannot be varargs: call with the actual argument types
         type = LLVMFunctionType(rettype, argtypes, argcount, 0);

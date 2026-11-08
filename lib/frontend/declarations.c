@@ -1525,6 +1525,15 @@ declare_routine (expr_ctx_t ctx, scopectx_t scope, decltype_t dt, int is_bind)
             }
         }
         if (dt == DCL_FORWARD) attr.flags |= SYM_M_FORWARD;
+        if (attr.linkage == LNKTYPE_INTERRUPT) {
+            // Implicitly NOVALUE (LRM 13.3.4.2); formals: the address of
+            // the interrupt frame, and the error code for some exceptions
+            unsigned int n = namereflist_length(&attr.inargs);
+            attr.flags |= SYM_M_NOVALUE;
+            if (dt != DCL_EXTERNAL && dt != DCL_FORWARD && !is_bind && (n < 1 || n > 2)) {
+                expr_signal(ctx, STC__INTRPARMS);
+            }
+        }
         np = rtnsym_declare(scope, namestr, &attr, pos);
         if (is_bind || dt == DCL_NORMAL || dt == DCL_GLOBAL) {
             expr_node_t *exp;
@@ -1755,7 +1764,8 @@ parse_linkage_globals (expr_ctx_t ctx, linkage_t *ldef)
  *                     { : option... } {,...} ;
  *
  * CALL is the C convention; JSB is a fast convention between BLISS
- * routines. STANDARD parameter locations only. GLOBAL (name = reg, ...)
+ * routines; INTERRUPT is an x86 interrupt handler. STANDARD parameter
+ * locations only. GLOBAL (name = reg, ...)
  * names the global register segments; PRESERVE, NOPRESERVE and NOTUSED
  * are ignored.
  */
@@ -1763,7 +1773,7 @@ static int
 declare_linkage (expr_ctx_t ctx, scopectx_t scope)
 {
     parse_ctx_t pctx = expr_parse_ctx(ctx);
-    static strdesc_t types[] = { STRDEF("CALL"), STRDEF("JSB") };
+    static strdesc_t types[] = { STRDEF("CALL"), STRDEF("JSB"), STRDEF("INTERRUPT") };
     strdesc_t *namestr;
     textpos_t pos;
     lexeme_t *lex;

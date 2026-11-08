@@ -3,18 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T9. INTERRUPT linkage type
-
-In the LRM, INTERRUPT is a linkage-type, not a routine
-attribute (BLISS-16 13.2.4.1, BLISS-32 13.3.4.2; BLISS-36 has
-PS_INTERRUPT); a routine gets it through `LINKAGE l = INTERRUPT;` and
-`ROUTINE r : l`. Such a routine must not be called directly.
-
-- Accept `INTERRUPT` as a linkage-type (`declare_linkage`); map it to the LLVM
-  `x86_intrcc` calling convention. Reject direct calls to it.
-- Test: compile-only check of the emitted calling convention (`!! cout`
-  or object inspection).
-
 ## T10. %ASCID string descriptors
 
 - Emit a static descriptor (length word, type, class, pointer) followed by

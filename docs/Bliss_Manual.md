@@ -1132,8 +1132,12 @@ whose address is in `l` (LRM 12.2, UM 5.2.5). With the default linkage,
 code can call each other directly; `JSB` is a faster convention for calls
 between BLISS routines (LLVM `fastcc`). Both sides of a call must agree,
 so declare an `EXTERNAL ROUTINE` with the same linkage as its definition.
-Parameters are always `STANDARD`: `REGISTER =` locations and other linkage
-types (`INTERRUPT`, BLISS-36 `PUSHJ`, ...) are errors. The register-usage
+`INTERRUPT` makes an x86 interrupt handler (LLVM `x86_intrcc`, returning
+with `IRETQ`): it is `NOVALUE`, its first formal is the address of the
+interrupt frame (RIP, CS, RFLAGS, RSP, SS) and an optional second one is
+the error code; it cannot be called from BLISS code. Parameters are always
+`STANDARD`: `REGISTER =` locations and other linkage types (BLISS-36
+`PUSHJ`, ...) are errors. The register-usage
 options `PRESERVE`, `NOPRESERVE` and `NOTUSED` are accepted and ignored;
 `GLOBAL` names global register segments (§9). `ACTUALCOUNT`, `ACTUALPARAMETER` and `ARGPTR` need a `CALL`
 linkage.

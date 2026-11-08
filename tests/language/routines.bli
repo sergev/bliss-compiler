@@ -180,11 +180,31 @@ ROUTINE jsb_default =
     inner (41)
     END;
 
-test_setup(numcases=21);
+! INTERRUPT linkage (LRM 13.3.4.2): an x86 interrupt handler, which
+! returns with IRETQ (bytes 48 CF); it is not called directly.
+LINKAGE
+    intr = INTERRUPT : NOTUSED (3);
+
+OWN
+    intrcount : VOLATILE;
+
+ROUTINE on_trap (frame, code) : intr =
+    intrcount = .intrcount + .code;
+
+ROUTINE has_iret (a) =
+    BEGIN
+    INCR i FROM 0 TO 255 DO
+        IF .(.a + .i)<0, 8> EQL %X'48' AND .(.a + .i + 1)<0, 8> EQL %X'CF'
+        THEN
+            RETURN 1;
+    0
+    END;
+
+test_setup(numcases=22);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 21 OF
+    CASE .caseno FROM 1 TO 22 OF
     SET
         [1] : test_output(.caseno, 'fact=%ld,%ld', fact(1), fact(12));
 !! 1 fact=1,479001600
@@ -261,6 +281,8 @@ BEGIN
 !! 20 linkage=1,0,7,15,3,42
         [21] : test_output(.caseno, 'library=%ld,%ld', test_jsb_twice (21), .test_extdata2);
 !! 21 library=42,99
+        [22] : test_output(.caseno, 'interrupt=%ld', has_iret (on_trap));
+!! 22 interrupt=1
     TES;
 END;
 

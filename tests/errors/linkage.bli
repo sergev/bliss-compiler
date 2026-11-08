@@ -17,5 +17,14 @@ ROUTINE r (a) : regs =
     END;
 !! cerr %BLISS-E-LNKFNLNK,
 
+! An INTERRUPT routine has one or two formals and cannot be called
+LINKAGE
+    intr = INTERRUPT;
+ROUTINE i3 (a, b, c) : intr = 0;
+!! cerr %BLISS-E-INTRPARMS,
+ROUTINE i1 (frame) : intr = 0;
+ROUTINE caller = i1 (0);
+!! cerr %BLISS-E-INTRCALL,
+
 END
 ELUDOM
