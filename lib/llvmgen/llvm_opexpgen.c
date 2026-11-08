@@ -218,7 +218,7 @@ gen_shift (gencodectx_t gctx, expr_node_t *lhs, expr_node_t *rhs, LLVMTypeRef ne
         long count = expr_litval(rhs);
         if (count < 0) {
             rval = LLVMConstInt(inttype, (unsigned long long int) -count, 0);
-            result = LLVMBuildLShr(builder, lval, rval, llvmgen_temp(gctx));
+            result = LLVMBuildAShr(builder, lval, rval, llvmgen_temp(gctx));
         } else {
             rval = LLVMConstInt(inttype, (unsigned long long int) count, 0);
             result = LLVMBuildShl(builder, lval, rval, llvmgen_temp(gctx));
@@ -239,7 +239,7 @@ gen_shift (gencodectx_t gctx, expr_node_t *lhs, expr_node_t *rhs, LLVMTypeRef ne
         llvmgen_btrack_update(gctx, bt, result);
         LLVMPositionBuilderAtEnd(builder, rshiftblk);
         rval = LLVMBuildNeg(builder, rval, llvmgen_temp(gctx));
-        result = LLVMBuildLShr(builder, lval, rval, llvmgen_temp(gctx));
+        result = LLVMBuildAShr(builder, lval, rval, llvmgen_temp(gctx));
         llvmgen_btrack_update(gctx, bt, result);
         result = llvmgen_btrack_finalize(gctx, bt, inttype);
     }
@@ -298,10 +298,10 @@ gen_operator_expression (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef needed
             result = LLVMBuildMul(builder, lval, rval, llvmgen_temp(gctx));
             break;
         case OPER_DIV:
-            result = LLVMBuildUDiv(builder, lval, rval, llvmgen_temp(gctx));
+            result = LLVMBuildSDiv(builder, lval, rval, llvmgen_temp(gctx));
             break;
         case OPER_MODULO:
-            result = LLVMBuildURem(builder, lval, rval, llvmgen_temp(gctx));
+            result = LLVMBuildSRem(builder, lval, rval, llvmgen_temp(gctx));
             break;
         case OPER_AND:
             result = LLVMBuildAnd(builder, lval, rval, llvmgen_temp(gctx));
