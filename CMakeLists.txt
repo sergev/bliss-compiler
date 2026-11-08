@@ -69,10 +69,26 @@ add_custom_target(testharness ALL
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
         DEPENDS blissc)
 
+# Real-world definition files from MX, compiled as libraries in dependency order
+set(MX_LIBS fields md5def md5 status qp charconv accounting ipc router x509 ssl mx_old_lcldefs)
+set(MX_LIB_FILES)
+set(MX_PREV_LIB)
+foreach(lib ${MX_LIBS})
+  string(TOUPPER ${lib} LIBNAME)
+  set(out ${CMAKE_BINARY_DIR}/tests/${LIBNAME}.lib)
+  add_custom_command(OUTPUT ${out}
+          COMMAND $<TARGET_FILE:blissc> --library -I ${CMAKE_BINARY_DIR}/tests -o ${out} ${CMAKE_SOURCE_DIR}/tests/mx/${lib}.r32
+          WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+          DEPENDS blissc ${CMAKE_SOURCE_DIR}/tests/mx/${lib}.r32 ${MX_PREV_LIB})
+  list(APPEND MX_LIB_FILES ${out})
+  set(MX_PREV_LIB ${out})
+endforeach()
+add_custom_target(mxlibs ALL DEPENDS ${MX_LIB_FILES})
+
 add_custom_target(check
         COMMAND python3 "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc="${CMAKE_C_COMPILER}" "${CMAKE_SOURCE_DIR}/tests"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-        DEPENDS testharness blissc)
+        DEPENDS testharness mxlibs blissc)
 
 # One CTest test per .bli file
 enable_testing()

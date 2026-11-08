@@ -1,0 +1,45 @@
+MODULE test =
+BEGIN
+
+! Uses the MD5 context layout from MX (md5.r32), which is
+! built by the FIELDS macro package (fields.r32).
+
+LIBRARY 'testharness.lib';
+LIBRARY 'MD5DEF';
+LIBRARY 'MD5';
+
+OWN
+    ctx : CTXDEF;
+
+BIND
+    bytes = ctx : VECTOR [CTX_S_CTXDEF, BYTE];
+
+test_setup(numcases=4);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    CASE .caseno FROM 1 TO 4 OF
+    SET
+        [1] : test_output(.caseno, 'size=%d,%d', CTX_S_CTXDEF, MD5_S_MD5CTXDEF);
+!! 1 size=88,88
+        [2] : test_output(.caseno, 'state=%d,%d,%d,%d',
+                %FIELDEXPAND(CTX_L_STATE1, 0), %FIELDEXPAND(CTX_L_STATE2, 0),
+                %FIELDEXPAND(CTX_L_STATE3, 0), %FIELDEXPAND(CTX_L_STATE4, 0));
+!! 2 state=0,4,8,12
+        [3] : test_output(.caseno, 'count=%d,%d buffer=%d width=%d',
+                %FIELDEXPAND(CTX_L_COUNT1, 0), %FIELDEXPAND(CTX_L_COUNT2, 0),
+                %FIELDEXPAND(CTX_X_BUFFER, 0), %FIELDEXPAND(CTX_L_STATE1, 2));
+!! 3 count=16,20 buffer=24 width=32
+        [4] : BEGIN
+            ctx[CTX_L_STATE1] = %X'67452301';
+            ctx[CTX_L_STATE2] = %X'EFCDAB89';
+            ctx[CTX_L_COUNT2] = 7;
+            test_output(.caseno, 'b0=%x b4=%x b20=%d s2=%x',
+                .bytes[0], .bytes[4], .bytes[20], .ctx[CTX_L_STATE2]);
+        END;
+!! 4 b0=1 b4=89 b20=7 s2=efcdab89
+    TES;
+END;
+
+END
+ELUDOM

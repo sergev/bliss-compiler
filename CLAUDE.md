@@ -35,6 +35,8 @@ Each test is a `.bli` module that does `LIBRARY 'testharness.lib'`, calls `test_
 
 The runner compiles the test with `blissc -o x.o -I .`, links it with `tests/testharness.c` using the C compiler, runs it, and compares output.
 
+`tests/mx/` holds unmodified definition files (`.r32`) from the MX mail system (BSD license, see `tests/mx/LICENSE`). The `mxlibs` target compiles them into `build/tests/*.lib` in dependency order (`MX_LIBS` in `CMakeLists.txt`), so a front-end regression breaks the build; `mx/md5ctx.bli` uses them at run time.
+
 ## Architecture
 
 Static libraries, linked into `blissc` by [CMakeLists.txt](CMakeLists.txt):
