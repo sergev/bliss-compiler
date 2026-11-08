@@ -1117,7 +1117,17 @@ ADDF (a, b, sum);               ! sum = .a + .b, as F-floating
 PROBER (mode, %REF (.len), .p)  ! a value is passed as %REF (value)
 ```
 
-blissc does not have them.
+**blissc** has the floating-point ones: `ADDx`, `SUBx`, `MULx`, `DIVx`
+(`SUBx (a, b, dst)` stores `b - a`; `DIVx (a, b, dst)` stores `b / a`) and
+`CMPx` (-1, 0 or 1), for x = `F` (IEEE single, in a `LONG`), `D` and `G`
+(IEEE double, in a fullword):
+
+```bliss
+BUILTIN ADDF, CMPF;
+OWN a : LONG INITIAL (LONG (%E'1.5')), b : LONG INITIAL (LONG (%E'4.0')), c : LONG;
+ADDF (a, b, c);                         ! c = 5.5
+CMPF (a, b)                             ! -1
+```
 
 ## 21. Linkages and condition handling
 

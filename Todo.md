@@ -3,14 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T12. Floating-point arithmetic and comparison builtins
-
-- `BUILTIN` names (UM 4) `ADDx`, `SUBx`, `MULx`, `DIVx`, `CMPx` for
-  x = F, D, G; all operands are addresses (VAX order: `SUBx (sub, min,
-  dst)`, `DIVx (divisor, dividend, quot)`); `CMPx` returns -1, 0, 1.
-- Generator in `llvm_execfuncgen.c`: load, compute, store.
-- Test: each operation on F and D values.
-
 ## T13. Floating-point conversions
 
 - `CVTxy (srca, dsta)` for F, D, G and longword integers (L, I):

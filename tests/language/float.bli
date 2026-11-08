@@ -1,0 +1,56 @@
+MODULE test =
+BEGIN
+
+! Floating point (BLISS-32 User Manual, chapter 4): there are no float
+! operators; BUILTIN functions take the addresses of their operands.
+
+LIBRARY 'testharness.lib';
+
+BUILTIN
+    ADDF, SUBF, MULF, DIVF, CMPF,
+    ADDD, SUBD, MULD, DIVD, CMPD,
+    ADDG, SUBG, MULG, DIVG, CMPG;
+
+OWN
+    fa : LONG INITIAL (LONG (%E'1.5')),
+    fb : LONG INITIAL (LONG (%E'4.0')),
+    fc : LONG,
+    da : INITIAL (%D'10.0'),
+    db : INITIAL (%D'2.5'),
+    dc,
+    ga : INITIAL (%G'0.5'),
+    gb : INITIAL (%G'-3.0'),
+    gc;
+
+test_setup(numcases=3);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL r1, r2, r3, r4;
+    CASE .caseno FROM 1 TO 3 OF
+    SET
+        [1] : BEGIN
+            ! SUBx (subtrahend, minuend, dst), DIVx (divisor, dividend, quot)
+            ADDF (fa, fb, fc); r1 = .fc;
+            SUBF (fa, fb, fc); r2 = .fc;
+            MULF (fa, fb, fc); r3 = .fc;
+            DIVF (fa, fb, fc); r4 = .fc;
+            test_output(.caseno, 'F=%lx,%lx,%lx,%lx', .r1, .r2, .r3, .r4);
+        END;
+!! 1 F=40b00000,40200000,40c00000,402aaaab
+        [2] : BEGIN
+            ADDD (da, db, dc); r1 = .dc;
+            SUBD (db, da, dc); r2 = .dc;
+            MULG (ga, gb, gc); r3 = .gc;
+            DIVG (ga, gb, gc); r4 = .gc;
+            test_output(.caseno, 'D,G=%lx,%lx,%lx,%lx', .r1, .r2, .r3, .r4);
+        END;
+!! 2 D,G=4029000000000000,401e000000000000,bff8000000000000,c018000000000000
+        [3] : test_output(.caseno, 'cmp=%ld,%ld,%ld,%ld,%ld', CMPF (fa, fb), CMPF (fb, fa),
+                          CMPF (fa, fa), CMPD (da, db), CMPG (gb, ga));
+!! 3 cmp=-1,1,0,1,-1
+    TES;
+END;
+
+END
+ELUDOM

@@ -88,6 +88,24 @@ static struct {
     { "SETUNWIND",   0, 0,                             0,          gen_setunwind },
 };
 
+static LLVMValueRef gen_float(gencodectx_t gctx, void *fctx,
+                              expr_node_t *node, LLVMTypeRef neededtype);
+
+// Floating-point BUILTINs (BLISS-32 User Manual, chapter 4). All
+// operands are addresses. Types: F single, D and G double.
+struct fltop_s {
+    const char *name;
+    char        op;     // + - * / (arithmetic), c (compare)
+    char        type;
+};
+static struct fltop_s fltops[] = {
+    { "ADDF", '+', 'F' }, { "ADDD", '+', 'D' }, { "ADDG", '+', 'G' },
+    { "SUBF", '-', 'F' }, { "SUBD", '-', 'D' }, { "SUBG", '-', 'G' },
+    { "MULF", '*', 'F' }, { "MULD", '*', 'D' }, { "MULG", '*', 'G' },
+    { "DIVF", '/', 'F' }, { "DIVD", '/', 'D' }, { "DIVG", '/', 'G' },
+    { "CMPF", 'c', 'F' }, { "CMPD", 'c', 'D' }, { "CMPG", 'c', 'G' },
+};
+
 // Linkage functions (LRM 13.6); BUILTIN names
 static struct {
     const char *name;
@@ -165,6 +183,19 @@ llvmgen_execfuncgen_init (gencodectx_t gctx)
         fdef.numargs = lnkfuncs[i].numargs;
         fdef.flags = FUNC_M_BUILTIN;
         fdef.generator = (execfuncgenerator_fn) lnkfuncs[i].func;
+        if (execfunc_define(kwdscope, &fdef, 0) == 0) {
+            expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_execfuncgen_init");
+        }
+    }
+    for (i = 0; i < sizeof(fltops)/sizeof(fltops[0]); i++) {
+        funcdef_t fdef;
+        memset(&fdef, 0, sizeof(fdef));
+        strcpy(fdef.name, fltops[i].name);
+        fdef.namelen = strlen(fltops[i].name);
+        fdef.numargs = (fltops[i].op == 'c' ? 2 : 3);
+        fdef.flags = FUNC_M_BUILTIN | (fltops[i].op == 'c' ? 0 : FUNC_M_NOVALUE);
+        fdef.generator = (execfuncgenerator_fn) gen_float;
+        fdef.genfnctx = &fltops[i];
         if (execfunc_define(kwdscope, &fdef, 0) == 0) {
             expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_execfuncgen_init");
         }
@@ -1160,3 +1191,71 @@ gen_setunwind (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neede
     return llvmgen_adjustval(gctx, v, neededtype, 0);
 
 } /* gen_setunwind */
+
+/*
+ * flt_type
+ *
+ * LLVM type for a floating-point (F, D, G) or longword (L, I) operand.
+ */
+static LLVMTypeRef
+flt_type (gencodectx_t gctx, char t)
+{
+    switch (t) {
+        case 'F': return LLVMFloatTypeInContext(gctx->llvmctx);
+        case 'D':
+        case 'G': return LLVMDoubleTypeInContext(gctx->llvmctx);
+        default:  return LLVMInt32TypeInContext(gctx->llvmctx);
+    }
+
+} /* flt_type */
+
+/*
+ * gen_float
+ *
+ * Floating-point BUILTINs. ADDx (a, b, dst): dst = a + b;
+ * SUBx (a, b, dst): dst = b - a; MULx; DIVx (divisor, dividend, quot):
+ * quot = dividend / divisor; CMPx (a, b): -1, 0 or 1.
+ */
+static LLVMValueRef
+gen_float (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    struct fltop_s *f = ctx;
+    LLVMBuilderRef b;
+    LLVMTypeRef ptrtype = LLVMPointerTypeInContext(gctx->llvmctx, 0);
+    LLVMTypeRef t = flt_type(gctx, f->type);
+    LLVMValueRef addr[3], x, y, r;
+    expr_node_t *arg;
+    unsigned int i;
+
+    if (gctx->curfn == 0) {
+        expr_signal(gctx->ectx, STC__LNKFNRTN, name_string(expr_func_name(exp)));
+        return (neededtype == 0 ? 0 : LLVMConstNull(neededtype));
+    }
+    b = gctx->curfn->builder;
+    for (i = 0, arg = exprseq_head(expr_func_arglist(exp)); arg != 0 && i < 3;
+         i++, arg = arg->tq_next) {
+        addr[i] = llvmgen_expression(gctx, arg, ptrtype);
+    }
+    x = LLVMBuildLoad2(b, t, addr[0], "");
+    y = LLVMBuildLoad2(b, t, addr[1], "");
+    switch (f->op) {
+        case '+': r = LLVMBuildFAdd(b, x, y, ""); break;
+        case '-': r = LLVMBuildFSub(b, y, x, ""); break;
+        case '*': r = LLVMBuildFMul(b, x, y, ""); break;
+        case '/': r = LLVMBuildFDiv(b, y, x, ""); break;
+        default: {
+            LLVMValueRef gt = LLVMBuildFCmp(b, LLVMRealOGT, x, y, "");
+            LLVMValueRef lt = LLVMBuildFCmp(b, LLVMRealOLT, x, y, "");
+            r = LLVMBuildSub(b, LLVMBuildZExt(b, gt, gctx->fullwordtype, ""),
+                             LLVMBuildZExt(b, lt, gctx->fullwordtype, ""), "");
+            return llvmgen_adjustval(gctx, r, neededtype, 1);
+        }
+    }
+    LLVMBuildStore(b, r, addr[2]);
+    if (neededtype != 0) {
+        expr_signal(gctx->ectx, STC__EXPRVALRQ);
+        return LLVMConstNull(neededtype);
+    }
+    return 0;
+
+} /* gen_float */
