@@ -212,6 +212,7 @@ LLVMValueRef llvmgen_addr_expression(gencodectx_t gctx, expr_node_t *exp, llvm_a
 LLVMValueRef llvmgen_rtntype_info(gencodectx_t gctx, name_t *np, LLVMTypeRef *func_type, LLVMTypeRef *return_type);
 void llvmgen_deref_push(gencodectx_t gctx, name_t *np);
 void llvmgen_args_to_locals(gencodectx_t gctx, name_t *np);
+void llvmgen_block_begin(gencodectx_t gctx, scopectx_t scope);
 void llvmgen_deref_pop(gencodectx_t gctx, name_t *np);
 void llvmgen_expgen_register(gencodectx_t gctx, exprtype_t type, llvmgen_expgen_fn func);
 void llvmgen_opexpgen_init(gencodectx_t gctx);

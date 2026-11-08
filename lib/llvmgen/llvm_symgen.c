@@ -44,13 +44,20 @@ struct llvm_datasym_s {
     unsigned int        flags;
     llvm_stgclass_t     vclass;
     int                 deref;
+    int                 pending;    // deferred to block entry: LLVMGEN_K_PEND_xxx
+    unsigned int        units;
 };
 typedef struct llvm_datasym_s llvm_datasym_t;
+
+#define LLVMGEN_K_PEND_NONE 0
+#define LLVMGEN_K_PEND_INIT 1       // LOCAL initializer
+#define LLVMGEN_K_PEND_BIND 2       // local BIND value
 
 struct llvm_rtnsym_s {
     LLVMTypeRef         type;
     LLVMTypeRef         returntype;
     LLVMValueRef        func;
+    int                 pending;    // BIND ROUTINE value deferred to block entry
 };
 typedef struct llvm_rtnsym_s llvm_rtnsym_t;
 
@@ -680,12 +687,20 @@ datasym_generator (void *vctx, name_t *np, void *p)
                                         (attr->flags & SYM_M_SIGNEXT) != 0);
         } else {
             expr_node_t *bindexp = iv->data.scalar.expr;
+            if (attr->sc == SYMSCOPE_LOCAL && gctx->curfn != 0 &&
+                !expr_is_ctce(bindexp) && !expr_is_ltce(bindexp)) {
+                // Run-time value: computed at entry to the declaring block
+                ld->type = type;
+                ld->vclass = LLVM_REG;
+                ld->pending = LLVMGEN_K_PEND_BIND;
+                return 1;
+            }
             bindval = llvmgen_expression(gctx, bindexp, type);
         }
         if (attr->sc == SYMSCOPE_LOCAL) {
             ld->value = bindval;
             ld->type = type;
-            LLVMSetValueName(ld->value, name_azstring(np));
+            if (LLVMIsAInstruction(ld->value)) LLVMSetValueName(ld->value, name_azstring(np));
             ld->vclass = LLVM_REG;
         } else {
             ld->value = LLVMAddGlobal(gctx->module, type, name_azstring(np));
@@ -737,13 +752,52 @@ datasym_generator (void *vctx, name_t *np, void *p)
             HelperSetAllocaAlignment(ld->value, 1U<<attr->alignment);
         }
         if (attr->ivlist != 0) {
-            handle_initializer(gctx, ld, np, units);
+            // Initialized at entry to the declaring block
+            ld->units = units;
+            ld->pending = LLVMGEN_K_PEND_INIT;
         }
     }
 
     return 1;
 
 } /* datasym_generator */
+
+/*
+ * llvmgen_block_begin
+ *
+ * Emits, in declaration order, the run-time work deferred for the
+ * names declared in a block: LOCAL initializers and local BIND values.
+ */
+void
+llvmgen_block_begin (gencodectx_t gctx, scopectx_t scope)
+{
+    void *ctx = 0;
+    name_t *np;
+
+    if (scope == 0 || gctx->curfn == 0) return;
+    for (np = scope_nextname(scope, &ctx); np != 0; np = scope_nextname(scope, &ctx)) {
+        llvm_datasym_t *ld;
+        if (name_type(np) == LEXTYPE_NAME_ROUTINE) {
+            llvm_rtnsym_t *lr = sym_genspace(np);
+            if (lr->pending) {
+                routine_attr_t *attr = rtnsym_attr(np);
+                lr->func = llvmgen_expression(gctx, attr->ivlist->data.scalar.expr,
+                                              LLVMPointerTypeInContext(gctx->llvmctx, 0));
+            }
+            continue;
+        }
+        if (name_type(np) != LEXTYPE_NAME_DATA) continue;
+        ld = sym_genspace(np);
+        if (ld->pending == LLVMGEN_K_PEND_INIT) {
+            handle_initializer(gctx, ld, np, ld->units);
+        } else if (ld->pending == LLVMGEN_K_PEND_BIND) {
+            data_attr_t *attr = datasym_attr(np);
+            ld->value = llvmgen_expression(gctx, attr->ivlist->data.scalar.expr, ld->type);
+            if (LLVMIsAInstruction(ld->value)) LLVMSetValueName(ld->value, name_azstring(np));
+        }
+    }
+
+} /* llvmgen_block_begin */
 
 /*
  * rtnsym_generator
@@ -782,6 +836,14 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
         // BIND ROUTINE: alias for the bound address, no function of its own
         expr_node_t *bexp = (attr->ivlist == 0 ? 0 : attr->ivlist->data.scalar.expr);
         LLVMValueRef v = 0;
+        if (bexp != 0 && gctx->curfn != 0 && attr->sc == SYMSCOPE_LOCAL &&
+            !expr_is_ctce(bexp) && !expr_is_ltce(bexp)) {
+            // Run-time value: computed at entry to the declaring block
+            lr->type = LLVMFunctionType(lr->returntype, 0, 0, 1);
+            lr->func = 0;
+            lr->pending = 1;
+            return 1;
+        }
         if (bexp != 0 && (gctx->curfn != 0 || expr_is_ctce(bexp) || expr_is_ltce(bexp))) {
             v = llvmgen_expression(gctx, bexp, LLVMPointerTypeInContext(gctx->llvmctx, 0));
         }

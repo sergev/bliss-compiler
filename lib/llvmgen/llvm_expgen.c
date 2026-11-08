@@ -247,6 +247,8 @@ gen_block (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
         gctx->curfn->btrack[LLVMGEN_K_BT_BLK] = bt;
     }
 
+    llvmgen_block_begin(gctx, expr_blk_scope(exp));
+
     for (e = exprseq_head(seq); e != 0; e = e->tq_next) {
         if (e->tq_next == 0) {
             val = llvmgen_expression(gctx, e, (expr_has_value(exp) ? gctx->fullwordtype : 0));
