@@ -2508,26 +2508,26 @@ parse_NUMBER (parse_ctx_t pctx, void *vctx, quotelevel_t ql, lextype_t curlt)
         expr_signal(ctx, STC__DELIMEXP, "(");
         return 1;
     }
+    // The result is a numeric-literal (LRM 15.5.10)
     lt = parser_next(pctx, QL_NORMAL, &lex);
     if (lt == LEXTYPE_STRING) {
         if (!string_numval(lexeme_text(lex), 10, &val)) {
             strdesc_t *text = lexeme_text(lex);
             expr_signal(ctx, STC__NUMCNVERR,
                        text->ptr, text->len);
-            lexeme_free(lctx, lex);
-            rlex = lexeme_create(lctx, LEXTYPE_STRING, &zero);
-        } else {
-            rlex = lex;
+            val = 0;
         }
+        lexeme_free(lctx, lex);
     } else {
-        strdesc_t *str;
         parser_insert(pctx, lex);
         if (!expr_parse_ctce(ctx, 0, &val)) {
             val = 0;
             expr_signal(ctx, STC__EXPCTCE);
         }
-        str = string_printf(ctx->strctx, 0, "%ld", val);
-        rlex = lexeme_create(lctx, LEXTYPE_STRING, str);
+    }
+    {
+        strdesc_t *str = string_printf(ctx->strctx, 0, "%ld", val);
+        rlex = lexeme_create(lctx, LEXTYPE_NUMERIC, str);
         string_free(ctx->strctx, str);
     }
     if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
