@@ -939,6 +939,11 @@ llvmgen_rtntype_info (gencodectx_t gctx, name_t *np, LLVMTypeRef *func_type, LLV
 static int
 symbol_gen_dispatch (void *vctx, name_t *np, void *p)
 {
+    gencodectx_t gctx = vctx;
+
+    // No module when generating a library: nothing to emit
+    if (gctx->module == 0) return 1;
+
     switch (name_type(np)) {
         case LEXTYPE_NAME_LITERAL:
             return litsym_generator(vctx, np, p);

@@ -398,6 +398,7 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
         if (err) { fprintf(stderr, "%s\n", err); LLVMDisposeMessage(err); }
     }
     LLVMDisposeModule(gctx->module);
+    gctx->module = 0;
     if (broken && log_errcount(expr_logctx(gctx->ectx)) == 0) {
         expr_signal(gctx->ectx, STC__INTCMPERR, "gencode_module_end");
     }
