@@ -1,0 +1,160 @@
+MODULE test =
+BEGIN
+
+! Character-handling functions (LRM 20).
+
+LIBRARY 'testharness.lib';
+
+OWN
+    x : VECTOR [CH$ALLOCATION (32)],
+    y : VECTOR [CH$ALLOCATION (32)],
+    cp;
+
+BIND
+    abcd = UPLIT ('ABCD'),
+    text = UPLIT ('  hello world  '),
+    upper = CH$TRANSTABLE (REP 97 OF (0), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+
+! Terminate a sequence so that it can be printed with %s.
+ROUTINE term (ptr, n) : NOVALUE =
+    CH$WCHAR (0, CH$PLUS (.ptr, .n));
+
+test_setup(numcases=20);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL p, q, n;
+
+    CASE .caseno FROM 1 TO 20 OF
+    SET
+        [1] : test_output(.caseno, 'alloc=%ld,%ld', CH$ALLOCATION (8) * %UPVAL GEQ 8,
+                CH$ALLOCATION (%UPVAL + 1));
+!! 1 alloc=1,2
+        [2] : BEGIN
+            cp = CH$PTR (abcd);
+            test_output(.caseno, 'rchar=%c,%c,%c,%c', CH$RCHAR (.cp), CH$A_RCHAR (cp),
+                CH$RCHAR_A (cp), CH$RCHAR (.cp));
+        END;
+!! 2 rchar=A,B,B,C
+        [3] : test_output(.caseno, 'ptroffset=%c,%c', CH$RCHAR (CH$PTR (abcd, 3)),
+                CH$RCHAR (CH$PLUS (CH$PTR (abcd), 2)));
+!! 3 ptroffset=D,C
+        [4] : BEGIN
+            p = CH$PTR (abcd, 1);
+            q = CH$PTR (abcd, 4);
+            test_output(.caseno, 'diff=%ld', CH$DIFF (.q, .p));
+        END;
+!! 4 diff=3
+        [5] : BEGIN
+            p = CH$PTR (x);
+            CH$WCHAR (%C'a', .p);
+            CH$WCHAR_A (%C'b', p);
+            CH$WCHAR_A (%C'c', p);
+            CH$A_WCHAR (%C'd', p);
+            test_output(.caseno, 'wchar=%c%c,%ld,%ld,%c', CH$RCHAR (CH$PTR (x)), CH$RCHAR (CH$PTR (x, 1)),
+                CH$RCHAR (CH$PTR (x, 2)), CH$DIFF (.p, CH$PTR (x)), CH$RCHAR (CH$PTR (x, 3)));
+        END;
+!! 5 wchar=bc,0,3,d
+        [6] : BEGIN
+            ! Example from LRM 20.2.5.2
+            p = CH$PTR (x);
+            INCR i FROM 1 TO 4 DO
+            BEGIN
+                p = CH$MOVE (.i, CH$PTR (abcd), .p);
+                p = CH$FILL (%C'-', 5 - .i, .p);
+            END;
+            term (CH$PTR (x), 20);
+            test_output(.caseno, 'movefill=%s,%ld', x, CH$DIFF (.p, CH$PTR (x)));
+        END;
+!! 6 movefill=A----AB---ABC--ABCD-,20
+        [7] : BEGIN
+            p = CH$COPY (2, CH$PTR (abcd), 3, CH$PTR (abcd, 1), %C'.', 8, CH$PTR (x));
+            term (CH$PTR (x), 8);
+            test_output(.caseno, 'copy=%s,%ld', x, CH$DIFF (.p, CH$PTR (x)));
+        END;
+!! 7 copy=ABBCD...,8
+        [8] : test_output(.caseno, 'eql=%ld,%ld,%ld',
+                CH$EQL (4, CH$PTR (abcd), 4, CH$PTR (UPLIT ('ABCD'))),
+                CH$EQL (4, CH$PTR (abcd), 4, CH$PTR (UPLIT ('ABCE'))),
+                CH$NEQ (2, CH$PTR (abcd), 2, CH$PTR (abcd, 2)));
+!! 8 eql=1,0,1
+        [9] : test_output(.caseno, 'order=%ld,%ld,%ld,%ld',
+                CH$LSS (3, CH$PTR (UPLIT ('abc')), 3, CH$PTR (UPLIT ('abd'))),
+                CH$GTR (3, CH$PTR (UPLIT ('abc')), 3, CH$PTR (UPLIT ('abd'))),
+                CH$LEQ (3, CH$PTR (UPLIT ('abc')), 3, CH$PTR (UPLIT ('abc'))),
+                CH$GEQ (3, CH$PTR (UPLIT ('abd')), 3, CH$PTR (UPLIT ('abc'))));
+!! 9 order=1,0,1,1
+        [10] : test_output(.caseno, 'compare=%ld,%ld,%ld',
+                CH$COMPARE (2, CH$PTR (UPLIT ('ab')), 2, CH$PTR (UPLIT ('ac'))),
+                CH$COMPARE (2, CH$PTR (UPLIT ('ab')), 2, CH$PTR (UPLIT ('ab'))),
+                CH$COMPARE (2, CH$PTR (UPLIT ('b ')), 2, CH$PTR (UPLIT ('ab'))));
+!! 10 compare=-1,0,1
+        [11] : test_output(.caseno, 'fillcmp=%ld,%ld',
+                CH$EQL (2, CH$PTR (UPLIT ('ab')), 4, CH$PTR (UPLIT ('ab  ')), %C' '),
+                CH$EQL (2, CH$PTR (UPLIT ('ab')), 4, CH$PTR (UPLIT ('ab  '))));
+!! 11 fillcmp=1,0
+        [12] : test_output(.caseno, 'lencmp=%ld,%ld',
+                CH$LSS (2, CH$PTR (UPLIT ('ab')), 3, CH$PTR (UPLIT ('abc'))),
+                CH$COMPARE (3, CH$PTR (UPLIT ('abc')), 2, CH$PTR (UPLIT ('ab'))));
+!! 12 lencmp=1,1
+        [13] : BEGIN
+            p = CH$FIND_CH (15, CH$PTR (text), %C'w');
+            test_output(.caseno, 'findch=%ld,%ld', CH$DIFF (.p, CH$PTR (text)),
+                CH$FAIL (CH$FIND_CH (15, CH$PTR (text), %C'z')));
+        END;
+!! 13 findch=8,1
+        [14] : BEGIN
+            p = CH$FIND_NOT_CH (15, CH$PTR (text), %C' ');
+            test_output(.caseno, 'findnotch=%ld,%c,%ld', CH$DIFF (.p, CH$PTR (text)), CH$RCHAR (.p),
+                CH$FAIL (.p));
+        END;
+!! 14 findnotch=2,h,0
+        [15] : BEGIN
+            p = CH$FIND_SUB (15, CH$PTR (text), 3, CH$PTR (UPLIT ('wor')));
+            q = CH$FIND_SUB (15, CH$PTR (text), 3, CH$PTR (UPLIT ('xyz')));
+            test_output(.caseno, 'findsub=%ld,%ld', CH$DIFF (.p, CH$PTR (text)), CH$FAIL (.q));
+        END;
+!! 15 findsub=8,1
+        [16] : BEGIN
+            CH$TRANSLATE (upper, 5, CH$PTR (UPLIT ('hello')), %C'*', 7, CH$PTR (x));
+            term (CH$PTR (x), 7);
+            test_output(.caseno, 'translate=%s', x);
+        END;
+!! 16 translate=HELLO**
+        [17] : BEGIN
+            ! Word extraction, after the LRM 20.2.7.2 example
+            LOCAL le, re;
+            le = CH$FIND_NOT_CH (15, CH$PTR (text), %C' ');
+            re = CH$FIND_CH (15 - CH$DIFF (.le, CH$PTR (text)), .le, %C' ');
+            n = CH$DIFF (.re, .le);
+            CH$MOVE (.n, .le, CH$PTR (x));
+            term (CH$PTR (x), .n);
+            test_output(.caseno, 'word=%s,%ld', x, .n);
+        END;
+!! 17 word=hello,5
+        [18] : BEGIN
+            n = 0;
+            p = CH$PTR (abcd);
+            INCR i FROM 1 TO 4 DO n = .n + CH$RCHAR_A (p);
+            test_output(.caseno, 'sum=%ld', .n);
+        END;
+!! 18 sum=266
+        [19] : BEGIN
+            CH$FILL (%C'#', 6, CH$PTR (y));
+            CH$MOVE (2, CH$PTR (abcd), CH$PTR (y, 2));
+            term (CH$PTR (y), 6);
+            test_output(.caseno, 'overlay=%s', y);
+        END;
+!! 19 overlay=##AB##
+        [20] : BEGIN
+            n = 3;
+            p = CH$COPY (.n, CH$PTR (abcd), 0, 5, CH$PTR (x));
+            test_output(.caseno, 'copyvar=%ld,%ld,%ld', CH$RCHAR (CH$PTR (x, 2)),
+                CH$RCHAR (CH$PTR (x, 3)), CH$DIFF (.p, CH$PTR (x)));
+        END;
+!! 20 copyvar=67,0,5
+    TES;
+END;
+
+END
+ELUDOM
