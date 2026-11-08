@@ -1116,6 +1116,11 @@ name_declare_internal (scopectx_t scope, const char *id, size_t len,
         }
         np = 0;
     }
+    // A declaration in an inner scope hides an outer one;
+    // never overwrite the outer entry
+    if (np != 0 && np->namescope != scope) {
+        np = 0;
+    }
     if (np == 0) {
         np = name_alloc(scope->home, type, id, len);
         if (np == 0) {
