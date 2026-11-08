@@ -138,6 +138,8 @@ llvmgen_addr_expression (gencodectx_t gctx, expr_node_t *exp,
         }
     } else {
         if (accinfo != 0) {
+            // A computed address always refers to memory
+            accinfo->segclass = LLVM_LOCAL;
             accinfo->flags |= LLVMGEN_M_ACC_GENEXPR;
             // Computed address: default to fullword access
             if (accinfo->width == 0) accinfo->width = machine_scalar_bits(gctx->mach);

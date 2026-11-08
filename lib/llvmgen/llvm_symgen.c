@@ -909,6 +909,31 @@ llvmgen_segaddress (gencodectx_t gctx, name_t *np, llvm_stgclass_t *segclassp,
 } /* llvmgen_segaddress */
 
 /*
+ * llvmgen_args_to_locals
+ *
+ * Formal parameters are variables: they can be assigned to and
+ * have their addresses taken.  Copy each incoming argument into
+ * a stack slot at routine entry.
+ */
+void
+llvmgen_args_to_locals (gencodectx_t gctx, name_t *np)
+{
+    routine_attr_t *attr = rtnsym_attr(np);
+    nameref_t *ref;
+
+    for (ref = namereflist_head(&attr->inargs); ref != 0; ref = ref->tq_next) {
+        llvm_datasym_t *ld = sym_genspace(ref->np);
+        LLVMValueRef slot;
+        if (ld->value == 0 || ld->type == 0 || ld->vclass != LLVM_REG) continue;
+        slot = LLVMBuildAlloca(gctx->curfn->builder, ld->type, name_azstring(ref->np));
+        LLVMBuildStore(gctx->curfn->builder, ld->value, slot);
+        ld->value = slot;
+        ld->vclass = LLVM_LOCAL;
+    }
+
+} /* llvmgen_args_to_locals */
+
+/*
  * llvmgen_rtntype_info
  *
  * Returns LLVM type info about a routine.

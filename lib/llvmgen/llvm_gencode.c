@@ -120,6 +120,7 @@ gencode_routine_begin (gencodectx_t gctx, name_t *np)
                                             llvmgen_label(gctx));
     rt->btrack[LLVMGEN_K_BT_FUNC] = llvmgen_btrack_create(gctx, exitblk);
     rt->func = thisfn;
+    llvmgen_args_to_locals(gctx, np);
 
     return 1;
 
