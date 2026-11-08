@@ -1,0 +1,175 @@
+MODULE test =
+BEGIN
+
+! Routines: parameters, recursion, NOVALUE, RETURN, REF arguments,
+! routine addresses, nested routines, FORWARD, BIND ROUTINE.
+
+LIBRARY 'testharness.lib';
+
+FORWARD ROUTINE
+    is_odd;
+
+OWN
+    counter,
+    buf : VECTOR [4];
+
+ROUTINE fact (n) =
+    IF .n LEQ 1 THEN 1 ELSE .n * fact(.n - 1);
+
+ROUTINE fib (n) =
+    IF .n LSS 2 THEN .n ELSE fib(.n - 1) + fib(.n - 2);
+
+ROUTINE is_even (n) =
+    IF .n EQL 0 THEN 1 ELSE is_odd(.n - 1);
+
+ROUTINE is_odd (n) =
+    IF .n EQL 0 THEN 0 ELSE is_even(.n - 1);
+
+ROUTINE sum6 (a, b, c, d, e, f) =
+    .a + 2 * .b + 3 * .c + 4 * .d + 5 * .e + 6 * .f;
+
+ROUTINE sum10 (a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) =
+    .a1 + .a2 + .a3 + .a4 + .a5 + .a6 + .a7 + .a8 + .a9 + .a10;
+
+ROUTINE bump : NOVALUE =
+    counter = .counter + 1;
+
+ROUTINE swap (pa, pb) : NOVALUE =
+BEGIN
+    LOCAL t;
+    t = ..pa;
+    .pa = ..pb;
+    .pb = .t;
+END;
+
+ROUTINE fill (v : REF VECTOR, n, val) : NOVALUE =
+    INCR i FROM 0 TO .n - 1 DO v[.i] = .val + .i;
+
+ROUTINE vsum (v : REF VECTOR, n) =
+BEGIN
+    LOCAL s;
+    s = 0;
+    INCR i FROM 0 TO .n - 1 DO s = .s + .v[.i];
+    .s
+END;
+
+ROUTINE modify_arg (x) =
+BEGIN
+    x = .x * 10;
+    .x
+END;
+
+ROUTINE add1 (x) = .x + 1;
+ROUTINE dbl (x) = .x * 2;
+
+ROUTINE apply (f, x) =
+BEGIN
+    BIND ROUTINE g = .f;
+    g(.x)
+END;
+
+ROUTINE apply_paren (f, x) = (.f)(.x);
+
+ROUTINE outer (x) =
+BEGIN
+    ROUTINE inner (y) = .y * .y;
+    inner(.x) + inner(.x + 1)
+END;
+
+ROUTINE classify (x) =
+BEGIN
+    IF .x LSS 0 THEN RETURN 1;
+    IF .x EQL 0 THEN RETURN 2;
+    3
+END;
+
+ROUTINE noval_return (x) : NOVALUE =
+BEGIN
+    IF .x THEN RETURN;
+    counter = 1000;
+END;
+
+ROUTINE gcd (a, b) =
+BEGIN
+    WHILE .b NEQ 0 DO
+    BEGIN
+        LOCAL t;
+        t = .a MOD .b;
+        a = .b;
+        b = .t;
+    END;
+    .a
+END;
+
+BIND ROUTINE twice = dbl;
+
+test_setup(numcases=17);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    CASE .caseno FROM 1 TO 17 OF
+    SET
+        [1] : test_output(.caseno, 'fact=%ld,%ld', fact(1), fact(12));
+!! 1 fact=1,479001600
+        [2] : test_output(.caseno, 'fib=%ld', fib(20));
+!! 2 fib=6765
+        [3] : test_output(.caseno, 'mutual=%ld,%ld', is_even(10), is_odd(7));
+!! 3 mutual=1,1
+        [4] : test_output(.caseno, 'sum6=%ld', sum6(1, 2, 3, 4, 5, 6));
+!! 4 sum6=91
+        [5] : test_output(.caseno, 'sum10=%ld', sum10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+!! 5 sum10=55
+        [6] : BEGIN
+            counter = 0;
+            bump(); bump(); bump();
+            test_output(.caseno, 'novalue=%ld', .counter);
+        END;
+!! 6 novalue=3
+        [7] : BEGIN
+            LOCAL a, b;
+            a = 1; b = 2;
+            swap(a, b);
+            test_output(.caseno, 'swap=%ld,%ld', .a, .b);
+        END;
+!! 7 swap=2,1
+        [8] : BEGIN
+            fill(buf, 4, 10);
+            test_output(.caseno, 'refvec=%ld,%ld', .buf[3], vsum(buf, 4));
+        END;
+!! 8 refvec=13,46
+        [9] : BEGIN
+            LOCAL x;
+            x = 5;
+            test_output(.caseno, 'byvalue=%ld,%ld', modify_arg(.x), .x);
+        END;
+!! 9 byvalue=50,5
+        [10] : test_output(.caseno, 'indirect=%ld,%ld', apply(add1, 41), apply(dbl, 21));
+!! 10 indirect=42,42
+        [11] : test_output(.caseno, 'parencall=%ld', apply_paren(add1, 9));
+!! 11 parencall=10
+        [12] : test_output(.caseno, 'nested=%ld', outer(3));
+!! 12 nested=25
+        [13] : test_output(.caseno, 'return=%ld,%ld,%ld', classify(-3), classify(0), classify(8));
+!! 13 return=1,2,3
+        [14] : BEGIN
+            counter = 0;
+            noval_return(1);
+            test_output(.caseno, 'novalreturn=%ld', .counter);
+        END;
+!! 14 novalreturn=0
+        [15] : test_output(.caseno, 'gcd=%ld', gcd(1071, 462));
+!! 15 gcd=21
+        [16] : test_output(.caseno, 'bindrtn=%ld', twice(8));
+!! 16 bindrtn=16
+        [17] : BEGIN
+            LOCAL rtns : VECTOR [2];
+            rtns[0] = add1;
+            rtns[1] = dbl;
+            test_output(.caseno, 'rtntable=%ld,%ld', (.rtns[0])(5), (.rtns[1])(5));
+        END;
+!! 17 rtntable=6,10
+    TES;
+END;
+
+END
+ELUDOM
