@@ -2573,10 +2573,8 @@ parse_nbits_func (parse_ctx_t pctx, void *vctx, quotelevel_t ql, lextype_t curlt
             return 1;
         }
         if (curlt == LEXTYPE_LXF_NBITS) {
-            thesebits = bits_needed((unsigned long) labs(val));
-            if (val < 0 && (val & (1 << (thesebits-1))) == 0) {
-                thesebits += 1;
-            }
+            // smallest i with -2**(i-1) <= val < 2**(i-1)
+            thesebits = bits_needed((unsigned long) (val < 0 ? ~val : val)) + 1;
         } else {
             thesebits = bits_needed((unsigned long) val);
         }
@@ -2592,7 +2590,7 @@ parse_nbits_func (parse_ctx_t pctx, void *vctx, quotelevel_t ql, lextype_t curlt
             return 1;
         }
     }
-    if (maxbits > machine_scalar_bits(mach) - (curlt == LEXTYPE_LXF_NBITS ? 1 : 0)) {
+    if (maxbits > machine_scalar_bits(mach)) {
         expr_signal(ctx, STC__NBITSERR, maxbits, machine_scalar_bits(mach));
         maxbits = machine_scalar_bits(mach);
     }

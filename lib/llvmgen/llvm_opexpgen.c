@@ -70,9 +70,15 @@ llvmgen_assignment (gencodectx_t gctx, expr_node_t *lhs, expr_node_t *rhs)
     }
     // If we're assigning into a field-reference with a non-zero
     // bit position or a non-CTCE size, we have to do some bit-shifting
-    // to do the store.
+    // to do the store.  Same for sizes that are not whole bytes:
+    // an iN store with N%8 != 0 clobbers the rest of the byte.
+    if (accinfo.posval == 0 && accinfo.sizeval == 0 &&
+        (accinfo.flags & LLVMGEN_M_ACC_CONSTSIZ) != 0 && accinfo.size % 8 != 0) {
+        accinfo.posval = LLVMConstInt(gctx->fullwordtype, 0, 0);
+    }
     if (accinfo.posval != 0 || accinfo.sizeval != 0) {
         shifts_required = 1;
+        accinfo.width = (accinfo.width + 7) & ~7u;
         lhstype = LLVMIntTypeInContext(gctx->llvmctx, accinfo.width);
         if ((accinfo.flags & LLVMGEN_M_ACC_CONSTSIZ) != 0) {
             accinfo.sizeval = LLVMConstInt(gctx->fullwordtype, accinfo.size, 0);

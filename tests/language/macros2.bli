@@ -38,13 +38,13 @@ mkconst (seven, 7);
 
 ROUTINE rout (x) = .x * 4;
 
-test_setup(numcases=20);
+test_setup(numcases=21);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL a, b, c, v;
 
-    CASE .caseno FROM 1 TO 20 OF
+    CASE .caseno FROM 1 TO 21 OF
     SET
         [1] : BEGIN
             a = 1; b = 2;
@@ -122,6 +122,10 @@ BEGIN
                 %IF %BPVAL GEQ 32 %THEN 1 %ELSE 0 %FI,
                 %IF %DECLARED (nosuch) %THEN 1 %ELSE %IF %DECLARED (rout) %THEN 2 %ELSE 3 %FI %FI);
 !! 20 lexcond=1,2
+        [21] : test_output(.caseno, 'nbits=%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld',
+                %NBITS (-8), %NBITS (-1), %NBITS (0), %NBITS (1), %NBITS (255),
+                %NBITS (1, 7), %NBITSU (1, 7), %NBITSU (0, 1, 255, 2, 3));
+!! 21 nbits=4,1,1,2,9,4,3,8
     TES;
 END;
 

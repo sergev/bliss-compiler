@@ -25,7 +25,7 @@ BEGIN
 !!  3 "CHARCOUNT = 3"
 !!  4 "An explosion"
         [5] : test_output(.caseno, '%%NBITS(7,5,2)=%d', %NBITS(7,5,2));
-!!  5 %NBITS(7,5,2)=3
+!!  5 %NBITS(7,5,2)=4
         [6] : test_output(.caseno, '%%NBITS(-7)=%d', %NBITS(-7));
 !!  6 %NBITS(-7)=4
         [7] : test_output(.caseno, '%%NBITS(-8)=%d', %NBITS(-8));

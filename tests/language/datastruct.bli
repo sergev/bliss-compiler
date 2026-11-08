@@ -52,13 +52,13 @@ BEGIN
     .s
 END;
 
-test_setup(numcases=21);
+test_setup(numcases=22);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL v, p, s;
 
-    CASE .caseno FROM 1 TO 21 OF
+    CASE .caseno FROM 1 TO 22 OF
     SET
         [1] : BEGIN
             ub[0] = 255; ub[1] = 256 + 7;
@@ -186,6 +186,15 @@ BEGIN
             test_output(.caseno, 'varsign=%ld,%ld', .wv<.p, .s, 1>, .wv<.p, .s, 0>);
         END;
 !! 21 varsign=-27,229
+        [22] : BEGIN
+            wv = %X'ABCD';
+            wv<0, 4> = 0;           ! sub-byte stores must keep the other bits
+            s = .wv;
+            wv<2, 4> = 0;
+            bits[0] = 0;
+            test_output(.caseno, 'subbyte=%lx,%lx,%ld', .s, .wv, .bits[9]);
+        END;
+!! 22 subbyte=abc0,abc0,1
     TES;
 END;
 
