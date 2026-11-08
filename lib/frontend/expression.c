@@ -592,6 +592,10 @@ parse_plit (expr_ctx_t ctx, lextype_t curlt, lexeme_t *lex)
     }
     exp = expr_node_alloc(ctx, EXPTYPE_PRIM_SEG, parser_curpos(pctx));
     expr_seg_name_set(exp, plitname);
+    // A PLIT's address is that of its first item; the count precedes it
+    if (curlt == LEXTYPE_KWD_PLIT) {
+        expr_seg_offset_set(exp, (long) machine_scalar_units(ctx->mach));
+    }
     expr_is_ltce_set(exp, 1);
     expr_has_value_set(exp, 1);
     return exp;

@@ -82,16 +82,16 @@ machine_psects_init (machinedef_t *mach, void *scope) {
     strdesc_t texttext =   STRDEF("__TEXT,__text");
     strdesc_t dotdata =    STRDEF(".data");
     strdesc_t dottext =    STRDEF(".text");
+    strdesc_t dotrodata =  STRDEF(".rodata");
 
     np = psect_declare(kwdscope, (mctx->is_macho ? &datadata : &dotdata),
                        PSECT_M_ATTR_WRITE, 0);
     scope_sclass_psectname_set(kwdscope, SCLASS_OWN, np);
     scope_sclass_psectname_set(kwdscope, SCLASS_GLOBAL, np);
-    np = psect_declare(kwdscope, (mctx->is_macho ? &textconst : &dottext), 0, 0);
+    // Read-only data: PLITs may hold addresses, so keep them out of .text
+    np = psect_declare(kwdscope, (mctx->is_macho ? &textconst : &dotrodata), 0, 0);
     scope_sclass_psectname_set(kwdscope, SCLASS_PLIT, np);
-    if (mctx->is_macho) {
-        np = psect_declare(kwdscope, &texttext, PSECT_M_ATTR_EXEC, 0);
-    } // otherwise, just reuse the text psect name
+    np = psect_declare(kwdscope, (mctx->is_macho ? &texttext : &dottext), PSECT_M_ATTR_EXEC, 0);
     scope_sclass_psectname_set(kwdscope, SCLASS_CODE, np);
 
 } /* machine_psects_init */
@@ -519,11 +519,8 @@ llvmgen_presetter (gencodectx_t gctx, initval_t *ivlist, unsigned int padding)
         return oneval;
     }
     initconst = LLVMConstStructInContext(gctx->llvmctx, varr, arrsize, 1);
-    oneval = LLVMAddGlobal(gctx->module, LLVMTypeOf(initconst), llvmgen_global(gctx));
-    LLVMSetLinkage(oneval, LLVMPrivateLinkage);
-    LLVMSetInitializer(oneval, initconst);
     free(varr);
-    return oneval;
+    return initconst;
 
 } /* llvmgen_presetter */
 
@@ -585,6 +582,15 @@ handle_initializer (gencodectx_t gctx, llvm_datasym_t *ld, name_t *np, unsigned 
             LLVMValueRef addr = llvmgen_adjustval(gctx, ld->value, LLVMPointerType(LLVMTypeOf(initval), 0), 0);
             LLVMBuildStore(gctx->curfn->builder, initval, addr);
         } else {
+            // Copy an aggregate initializer from a private constant
+            LLVMTypeKind k = LLVMGetTypeKind(LLVMTypeOf(initval));
+            if (k == LLVMStructTypeKind || k == LLVMArrayTypeKind) {
+                LLVMValueRef g = LLVMAddGlobal(gctx->module, LLVMTypeOf(initval), llvmgen_global(gctx));
+                LLVMSetLinkage(g, LLVMPrivateLinkage);
+                LLVMSetGlobalConstant(g, 1);
+                LLVMSetInitializer(g, initval);
+                initval = g;
+            }
             llvmgen_memcpy(gctx, ld->value, initval, LLVMConstInt(gctx->fullwordtype, typesize, 0));
         }
     }
