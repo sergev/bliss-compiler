@@ -103,14 +103,17 @@ function_bind (expr_ctx_t ctx, lextype_t lt, lexeme_t *lex)
         return 0;
     }
 
-    if (func->handler == 0) {
-        if ((func->flags & FUNC_M_NOPARSE) == 0) {
-            int varargs = (func->flags & FUNC_M_VARARGS) != 0;
-            if ((varargs && exprseq_length(&args) < func->numargs) ||
-                (!varargs && exprseq_length(&args) != func->numargs)) {
-                expr_signal(ctx, STC__INSFUNARG, name_string(np));
-            }
+    if ((func->flags & FUNC_M_NOPARSE) == 0) {
+        int varargs = (func->flags & FUNC_M_VARARGS) != 0;
+        if ((varargs && exprseq_length(&args) < func->numargs) ||
+            (!varargs && exprseq_length(&args) != func->numargs)) {
+            expr_signal(ctx, STC__INSFUNARG, name_string(np));
+            exprseq_free(ctx, &args);
+            return 0;
         }
+    }
+
+    if (func->handler == 0) {
         result = expr_node_alloc(ctx, EXPTYPE_EXECFUN, pos);
         if (result != 0) {
             expr_func_name_set(result, np);

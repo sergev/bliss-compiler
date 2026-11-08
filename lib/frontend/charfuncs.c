@@ -264,7 +264,10 @@ tt_items (expr_ctx_t ctx) {
             break;
         }
         if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
+            // Resynchronize at the closing paren to avoid looping forever
             expr_signal(ctx, STC__DELIMEXP, ",");
+            parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+            break;
         }
     }
     return ivlist;
@@ -344,13 +347,13 @@ static funcdef_t charfunc_funcs[] = {
     FUNCDEF("CH$MOVE",          charfunc_passthru,   0, 3, 0),
     FUNCDEF("CH$FILL",          charfunc_passthru,   0, 3, 0),
     FUNCDEF("CH$COPY",          charfunc_passthru,   0, 5, FUNC_M_VARARGS),
-    FUNCDEF("CH$EQL",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$NEQ",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$LSS",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$LEQ",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$GTR",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$GEQ",           charfunc_passthru,   0, 5, 0),
-    FUNCDEF("CH$COMPARE",       charfunc_passthru,   0, 5, 0),
+    FUNCDEF("CH$EQL",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$NEQ",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$LSS",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$LEQ",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$GTR",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$GEQ",           charfunc_passthru,   0, 4, FUNC_M_VARARGS),
+    FUNCDEF("CH$COMPARE",       charfunc_passthru,   0, 4, FUNC_M_VARARGS),
     FUNCDEF("CH$FIND_CH",       charfunc_passthru,   0, 3, 0),
     FUNCDEF("CH$FIND_NOT_CH",   charfunc_passthru,   0, 3, 0),
     FUNCDEF("CH$FIND_SUB",      charfunc_passthru,   0, 4, 0),

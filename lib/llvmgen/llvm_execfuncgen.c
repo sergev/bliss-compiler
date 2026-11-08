@@ -479,7 +479,9 @@ gen_ch_compare (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef need
     arg = arg->tq_next;
     argvals[2] = ptr2 = llvmgen_expression(gctx, arg, gctx->unitptrtype);
     arg = arg->tq_next;
-    fill = llvmgen_expression(gctx, arg, LLVMInt8TypeInContext(gctx->llvmctx));
+    // Fill character is optional, defaults to 0
+    fill = (arg == 0 ? LLVMConstNull(LLVMInt8TypeInContext(gctx->llvmctx))
+            : llvmgen_expression(gctx, arg, LLVMInt8TypeInContext(gctx->llvmctx)));
     t0 = LLVMBuildICmp(builder, LLVMIntULE, len1, len2, llvmgen_temp(gctx));
     t1 = LLVMBuildICmp(builder, LLVMIntEQ, len1, len2, llvmgen_temp(gctx));
     argvals[0] = bound = LLVMBuildSelect(builder, t0, len1, len2, llvmgen_temp(gctx));
