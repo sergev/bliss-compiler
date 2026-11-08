@@ -1,0 +1,193 @@
+MODULE test =
+BEGIN
+
+! Data structures (LRM 11): VECTOR, BITVECTOR, BLOCK, BLOCKVECTOR,
+! user STRUCTUREs, FIELDs, field-references, %SIZE, %ALLOCATION.
+
+LIBRARY 'testharness.lib';
+
+FIELD
+    node_fields = SET
+        nd_link = [0, 0, %BPVAL, 0],
+        nd_kind = [1, 0, 8, 0],
+        nd_flag = [1, 8, 1, 0],
+        nd_sval = [1, 16, 8, 1],
+        nd_data = [2, 0, %BPVAL, 0]
+    TES;
+
+LITERAL
+    node_size = 3;
+
+STRUCTURE
+    ring [i; n = 4] = [n * %UPVAL] (ring + (i MOD n) * %UPVAL),
+    matrix1 [r, c; nr, nc] = [nr * nc * %UPVAL] (matrix1 + ((r - 1) * nc + (c - 1)) * %UPVAL);
+
+OWN
+    ub : VECTOR [4, BYTE],
+    sb : VECTOR [4, BYTE, SIGNED],
+    sw : VECTOR [2, WORD, SIGNED],
+    ul : VECTOR [2, LONG],
+    sl : VECTOR [2, LONG, SIGNED],
+    bits : BITVECTOR [70],
+    nd1 : BLOCK [node_size] FIELD (node_fields),
+    nd2 : BLOCK [node_size] FIELD (node_fields),
+    bb : BLOCK [4, BYTE],
+    bv : BLOCKVECTOR [3, 2],
+    nodes : BLOCKVECTOR [2, node_size] FIELD (node_fields),
+    rg : ring,
+    rg8 : ring [8],
+    m1 : matrix1 [2, 3],
+    wv;
+
+ROUTINE node_sum (n : REF BLOCK FIELD (node_fields)) =
+BEGIN
+    LOCAL s, p : REF BLOCK FIELD (node_fields);
+    s = 0;
+    p = .n;
+    WHILE .p NEQ 0 DO
+    BEGIN
+        s = .s + .p[nd_data];
+        p = .p[nd_link];
+    END;
+    .s
+END;
+
+test_setup(numcases=21);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL v, p, s;
+
+    CASE .caseno FROM 1 TO 21 OF
+    SET
+        [1] : BEGIN
+            ub[0] = 255; ub[1] = 256 + 7;
+            test_output(.caseno, 'ubyte=%ld,%ld', .ub[0], .ub[1]);
+        END;
+!! 1 ubyte=255,7
+        [2] : BEGIN
+            sb[0] = 255; sb[1] = 127; sb[2] = 128;
+            test_output(.caseno, 'sbyte=%ld,%ld,%ld', .sb[0], .sb[1], .sb[2]);
+        END;
+!! 2 sbyte=-1,127,-128
+        [3] : BEGIN
+            sw[0] = %X'FFFE'; sw[1] = 1000;
+            test_output(.caseno, 'sword=%ld,%ld', .sw[0], .sw[1]);
+        END;
+!! 3 sword=-2,1000
+        [4] : BEGIN
+            ul[0] = %X'FFFFFFFF'; sl[0] = %X'FFFFFFFF';
+            test_output(.caseno, 'long=%ld,%ld', .ul[0], .sl[0]);
+        END;
+!! 4 long=4294967295,-1
+        [5] : BEGIN
+            ub[0] = 1; ub[1] = 2; ub[2] = 3; ub[3] = 4;
+            test_output(.caseno, 'bytelayout=%lx', .(ub)<0, 32>);
+        END;
+!! 5 bytelayout=4030201
+        [6] : BEGIN
+            bits[0] = 1; bits[9] = 1; bits[69] = 1;
+            s = 0;
+            INCR i FROM 0 TO 69 DO s = .s + .bits[.i];
+            test_output(.caseno, 'bitvec=%ld,%ld,%ld,%ld', .s, .bits[9], .bits[10], .bits[69]);
+        END;
+!! 6 bitvec=3,1,0,1
+        [7] : BEGIN
+            nd1[nd_kind] = 200;
+            nd1[nd_flag] = 1;
+            nd1[nd_sval] = -3;
+            test_output(.caseno, 'fields=%ld,%ld,%ld', .nd1[nd_kind], .nd1[nd_flag], .nd1[nd_sval]);
+        END;
+!! 7 fields=200,1,-3
+        [8] : BEGIN
+            nd1[nd_kind] = 0;
+            nd1[nd_flag] = 1;
+            test_output(.caseno, 'fieldpack=%lx', .nd1[1, 0, 16, 0]);
+        END;
+!! 8 fieldpack=100
+        [9] : BEGIN
+            nd1[nd_link] = nd2; nd1[nd_data] = 30;
+            nd2[nd_link] = 0;   nd2[nd_data] = 12;
+            test_output(.caseno, 'refblock=%ld', node_sum(nd1));
+        END;
+!! 9 refblock=42
+        [10] : BEGIN
+            bb[2, 0, 8, 0] = 9;
+            test_output(.caseno, 'byteblock=%ld,%ld', .bb[2, 0, 8, 0], %ALLOCATION(bb));
+        END;
+!! 10 byteblock=9,4
+        [11] : BEGIN
+            INCR i FROM 0 TO 2 DO
+            BEGIN
+                bv[.i, 0, 0, %BPVAL, 0] = .i;
+                bv[.i, 1, 0, %BPVAL, 0] = .i * 10;
+            END;
+            test_output(.caseno, 'blockvec=%ld,%ld,%ld', .bv[2, 1, 0, %BPVAL, 0],
+                .bv[1, 0, 0, %BPVAL, 0], .(bv + 5 * %UPVAL));
+        END;
+!! 11 blockvec=20,1,20
+        [12] : BEGIN
+            nodes[1, nd_kind] = 7;
+            nodes[1, nd_data] = 70;
+            nodes[0, nd_data] = 5;
+            test_output(.caseno, 'bvfields=%ld,%ld,%ld', .nodes[1, nd_kind], .nodes[1, nd_data], .nodes[0, nd_data]);
+        END;
+!! 12 bvfields=7,70,5
+        [13] : BEGIN
+            rg[1] = 11;
+            rg8[5] = 55;
+            test_output(.caseno, 'userstruct=%ld,%ld,%ld', .rg[5], .rg8[13], %ALLOCATION(rg8) / %UPVAL);
+        END;
+!! 13 userstruct=11,55,8
+        [14] : BEGIN
+            INCR r FROM 1 TO 2 DO INCR c FROM 1 TO 3 DO m1[.r, .c] = .r * 10 + .c;
+            test_output(.caseno, 'matrix=%ld,%ld,%ld', .m1[1, 1], .m1[2, 3], .(m1 + 4 * %UPVAL));
+        END;
+!! 14 matrix=11,23,22
+        [15] : test_output(.caseno, 'size=%ld,%ld,%ld', %SIZE(VECTOR [10, BYTE]),
+                %SIZE(BLOCKVECTOR [3, 2]) / %UPVAL, %SIZE(BITVECTOR [17]));
+!! 15 size=10,6,3
+        [16] : BEGIN
+            wv = 0;
+            wv<4, 4> = 15;
+            wv<12, 4> = 2;
+            test_output(.caseno, 'fieldref=%lx,%ld', .wv, .wv<4, 8>);
+        END;
+!! 16 fieldref=20f0,15
+        [17] : BEGIN
+            wv = %X'80';
+            test_output(.caseno, 'fieldsign=%ld,%ld', .wv<0, 8, 0>, .wv<0, 8, 1>);
+        END;
+!! 17 fieldsign=128,-128
+        [18] : BEGIN
+            wv = %X'ABCD';
+            p = 8; s = 4;
+            test_output(.caseno, 'varfield=%lx', .wv<.p, .s>);
+        END;
+!! 18 varfield=b
+        [19] : BEGIN
+            LOCAL pv;
+            MAP pv : REF VECTOR [, BYTE];
+            ub[2] = 99;
+            pv = ub;
+            test_output(.caseno, 'mapref=%ld', .pv[2]);
+        END;
+!! 19 mapref=99
+        [20] : BEGIN
+            LOCAL strs : VECTOR [2];
+            strs[0] = UPLIT BYTE (%ASCIZ 'first');
+            strs[1] = UPLIT BYTE (%ASCIZ 'second');
+            test_output(.caseno, 'ptrvec=%s,%s', .strs[1], .strs[0]);
+        END;
+!! 20 ptrvec=second,first
+        [21] : BEGIN
+            wv = %X'0E50';
+            p = 4; s = 8;
+            test_output(.caseno, 'varsign=%ld,%ld', .wv<.p, .s, 1>, .wv<.p, .s, 0>);
+        END;
+!! 21 varsign=-27,229
+    TES;
+END;
+
+END
+ELUDOM
