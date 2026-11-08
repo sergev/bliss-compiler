@@ -154,7 +154,7 @@ blissc_listopt_set (blissc_driverctx_t ctx, unsigned int flags,
     ctx->listflags = flags;
     if (fname != 0) {
         size_t fnlen = filename_length(fname, fnlen_p);
-        ctx->listfn = malloc(fnlen);
+        ctx->listfn = malloc(fnlen+1);
         if (ctx->listfn == 0) return 0;
         memcpy(ctx->listfn, fname, fnlen);
         ctx->listfn[fnlen] = '\0';
@@ -178,7 +178,7 @@ blissc_dumpir_set (blissc_driverctx_t ctx, int val,
     ctx->dumpir = val;
     if (fname != 0) {
         size_t fnlen = filename_length(fname, fnlen_p);
-        ctx->irfn = malloc(fnlen);
+        ctx->irfn = malloc(fnlen+1);
         if (ctx->irfn == 0) return 0;
         memcpy(ctx->irfn, fname, fnlen);
         ctx->irfn[fnlen] = '\0';
@@ -384,7 +384,7 @@ blissc_compile (blissc_driverctx_t ctx, const char *fname, int fnlen)
                   : declare_module(ctx->ectx));
     }
 
-    return status;
+    return status && log_errcount(ctx->logctx) == 0;
 
 } /* blissc_compile */
 

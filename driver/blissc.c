@@ -290,7 +290,7 @@ main (int argc, char *argv[])
     blissc_variant_set(cctx, variant);
     if (!blissc_compile(cctx, srcfile, -1)) {
         fprintf(stderr, "bliss_compile reported error\n");
-        status = 998;
+        status = 1;
         goto finish;
     }
 finish:
