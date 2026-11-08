@@ -711,6 +711,15 @@ datasym_generator (void *vctx, name_t *np, void *p)
         if (attr->alignment != 0) {
             LLVMSetAlignment(ld->value, 1U<<attr->alignment);
         }
+    } else if (gctx->curfn == 0) {
+        // LOCAL outside a routine (e.g. placeholder for an undeclared
+        // name): no stack frame, so make it a static
+        type = gendatatype(gctx, attr, &units);
+        ld->value = LLVMAddGlobal(gctx->module, type, name_azstring(np));
+        ld->type = type;
+        LLVMSetInitializer(ld->value, LLVMConstNull(type));
+        LLVMSetLinkage(ld->value, LLVMInternalLinkage);
+        ld->vclass = LLVM_GLOBAL;
     } else {
         // Everything else is LOCAL, with an alloca, even REGISTER
         // declarations. XXX revisit later
@@ -761,6 +770,23 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     if (proto_only) {
         lr->type = LLVMFunctionType(lr->returntype, 0, 0, 1);
         lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
+        return 1;
+    }
+    if ((attr->flags & SYM_M_BIND) != 0) {
+        // BIND ROUTINE: alias for the bound address, no function of its own
+        expr_node_t *bexp = (attr->ivlist == 0 ? 0 : attr->ivlist->data.scalar.expr);
+        LLVMValueRef v = 0;
+        if (bexp != 0 && (gctx->curfn != 0 || expr_is_ctce(bexp) || expr_is_ltce(bexp))) {
+            v = llvmgen_expression(gctx, bexp, LLVMPointerTypeInContext(gctx->llvmctx, 0));
+        }
+        if (v != 0 && LLVMIsAFunction(v)) {
+            lr->func = v;
+            lr->type = LLVMGlobalGetValueType(v);
+            lr->returntype = LLVMGetReturnType(lr->type);
+        } else {
+            lr->type = LLVMFunctionType(lr->returntype, 0, 0, 1);
+            lr->func = (v != 0 ? v : LLVMConstNull(LLVMPointerTypeInContext(gctx->llvmctx, 0)));
+        }
         return 1;
     }
     argcount = namereflist_length(&attr->inargs);

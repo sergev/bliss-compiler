@@ -361,8 +361,17 @@ int
 gencode_module_end (gencodectx_t gctx, name_t *np)
 {
     char *err;
+    int broken;
 
-    if (gctx->optlevel > 0) {
+    // A module left broken by earlier errors can't be optimized or emitted
+    err = 0;
+    broken = LLVMVerifyModule(gctx->module, LLVMReturnStatusAction, &err);
+    if (broken && log_errcount(expr_logctx(gctx->ectx)) == 0 && err != 0) {
+        fprintf(stderr, "%s\n", err);
+    }
+    if (err != 0) LLVMDisposeMessage(err);
+
+    if (!broken && gctx->optlevel > 0) {
         LLVMPassBuilderOptionsRef pass_builder_options = LLVMCreatePassBuilderOptions();
         LLVMErrorRef llvm_error;
 
@@ -377,7 +386,6 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
         }
         LLVMDisposePassBuilderOptions(pass_builder_options);
     }
-    LLVMVerifyModule(gctx->module, LLVMPrintMessageAction, 0);
     if (gctx->mctx->irdumpfile != 0) {
         err = 0;
         if (LLVMPrintModuleToFile(gctx->module, gctx->mctx->irdumpfile, &err)) {
@@ -385,11 +393,14 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
         }
     }
     err = 0;
-    if (LLVMTargetMachineEmitToFile(gctx->mctx->target_machine, gctx->module,
+    if (!broken && LLVMTargetMachineEmitToFile(gctx->mctx->target_machine, gctx->module,
                                     gctx->mctx->outfile, gctx->mctx->outputtype, &err)) {
         if (err) { fprintf(stderr, "%s\n", err); LLVMDisposeMessage(err); }
     }
     LLVMDisposeModule(gctx->module);
+    if (broken && log_errcount(expr_logctx(gctx->ectx)) == 0) {
+        expr_signal(gctx->ectx, STC__INTCMPERR, "gencode_module_end");
+    }
 
     return 1;
 
