@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "blissc/nametable.h"
+#include <stddef.h>
 
 /*
  * Internal flags.
@@ -287,8 +288,9 @@ name_copy (name_t *src, scopectx_t dstscope)
     if (cfn != 0) {
         cfn(vctx, dst, dst->nameextra, src, src->nameextra);
     } else {
+        // typesize is the whole cell; copy only the extra space
         memcpy(dst->nameextra, src->nameextra,
-               ctx->typevec[typeidx(src->nametype)].typesize);
+               ctx->typevec[typeidx(src->nametype)].typesize - offsetof(name_t, nameextra));
     }
     return dst;
 
