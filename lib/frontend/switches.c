@@ -215,6 +215,18 @@ ignore_switch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, lexeme_t *swlex)
 } /* ignore_switch */
 
 /*
+ * ignore_toggle
+ *
+ * Handler for on-off switches that this compiler accepts but ignores.
+ */
+static int
+ignore_toggle (parse_ctx_t pctx, void *ctx, int togidx, lextype_t dcltype, name_t *togname)
+{
+    return 1;
+
+} /* ignore_toggle */
+
+/*
  * switches_ignored_declare
  *
  * Declares the switches that are accepted but ignored.
@@ -222,6 +234,15 @@ ignore_switch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, lexeme_t *swlex)
 void
 switches_ignored_declare (scopectx_t scope)
 {
+    static strdesc_t toggles[] = {
+        STRDEF("OPTIMIZE"), STRDEF("SAFE"), STRDEF("UNAMES"), STRDEF("ZIP")
+    };
+    name_t *onp, *offp;
+    unsigned int i;
+
+    for (i = 0; i < sizeof(toggles)/sizeof(toggles[0]); i++) {
+        switch_toggle_declare(scope, &toggles[i], ignore_toggle, 0, 0, &onp, &offp);
+    }
     switch_special_declare(scope, LEXTYPE_SWITCH_ADDRMODE, ignore_switch, 0);
     switch_special_declare(scope, LEXTYPE_SWITCH_LANGUAGE, ignore_switch, 0);
     switch_special_declare(scope, LEXTYPE_SWITCH_ENV, ignore_switch, 0);

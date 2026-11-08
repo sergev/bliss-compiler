@@ -13,6 +13,9 @@
 #include <stdarg.h>
 
 int TEST_INIT(void);
+
+/* For EXTERNAL data tests */
+long TEST_EXTDATA[3] = { 10, 20, 30 };
 void RUNTEST(int);
 
 void

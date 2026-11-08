@@ -702,6 +702,20 @@ datasym_generator (void *vctx, name_t *np, void *p)
             ld->type = type;
             if (LLVMIsAInstruction(ld->value)) LLVMSetValueName(ld->value, name_azstring(np));
             ld->vclass = LLVM_REG;
+        } else if (attr->sc == SYMSCOPE_GLOBAL && LLVMIsConstant(bindval)) {
+            // The bound address is used directly; export it as a symbol
+            // whose address is that value.
+            ld->value = bindval;
+            ld->type = type;
+            ld->vclass = LLVM_REG;
+            if (LLVMGetTypeKind(LLVMTypeOf(bindval)) == LLVMPointerTypeKind) {
+                LLVMAddAlias2(gctx->module, gctx->unittype, 0, bindval, name_azstring(np));
+            } else {
+                char buf[256];
+                snprintf(buf, sizeof(buf), ".globl %s\n.set %s, %lld", name_azstring(np),
+                         name_azstring(np), LLVMConstIntGetSExtValue(bindval));
+                LLVMAppendModuleInlineAsm(gctx->module, buf, strlen(buf));
+            }
         } else {
             ld->value = LLVMAddGlobal(gctx->module, type, name_azstring(np));
             ld->type = type;

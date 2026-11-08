@@ -508,6 +508,9 @@ EXTERNAL LITERAL max_users;            ! value comes from the linker
 
 A literal has no address; use it without a dot.
 
+**blissc:** `EXTERNAL LITERAL` is not supported: a `GLOBAL LITERAL` is
+exported as a constant variable, not as a link-time value.
+
 ### BIND: another name for an address
 
 ```bliss
@@ -767,7 +770,7 @@ before parsing. They work on token sequences and constants.
 | `%LTCE (e)` | 1 if e is a link-time constant |
 | `%DECLARED (name)` | 1 if name is declared |
 | `%BLISS (BLISS32)` | 1 if compiling with that dialect (**blissc**: `%BLISS (BLISSM)`) |
-| `%SWITCHES (...)` | 1 if the given switches are on |
+| `%SWITCHES (...)` | 1 if the given switches are on (not in blissc) |
 | `%VARIANT` | value of the `--variant` command-line option |
 
 ### Numbers
@@ -981,10 +984,16 @@ through `GLOBAL` and `EXTERNAL` declarations.
 ```bliss
 PSECT OWN = mydata;             ! put later OWN data in program section "mydata"
 SWITCHES NOOPTIMIZE;            ! change switches for the rest of the block
-BUILTIN SP;                     ! use a machine-specific builtin
+BUILTIN MOVSB;                  ! use a machine-specific builtin
 LABEL loop1;                    ! declare a label for LEAVE
 UNDECLARE tmp;                  ! forget a name (e.g. a macro from a library)
 ```
+
+**blissc:** the on-off switches `OPTIMIZE`, `SAFE`, `UNAMES` and `ZIP` are
+accepted and ignored; `ERRS` and the listing switches work. The x86
+builtins are `MOVSB (n, src, dst)` and `STOSB (ch, n, dst)`, which return
+the destination pointer advanced past what they wrote, plus `CMPSB`,
+`SCASB_REPE`, `SCASB_REPNE` and `SCASB_CMP`, used by the `CH$` functions.
 
 ## 21. Linkages and condition handling
 

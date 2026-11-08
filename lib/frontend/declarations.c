@@ -1573,15 +1573,17 @@ declare_library (parse_ctx_t pctx)
 static int
 undeclare (parse_ctx_t pctx, scopectx_t scope)
 {
-    lexeme_t *lex;
+    strdesc_t *namestr;
+    textpos_t pos;
 
     while (1) {
-        if (!parser_expect(pctx, QL_NAME, LEXTYPE_NAME, &lex, 1)) {
-            log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__NAMEEXP);
+        namestr = 0;
+        if (parse_decl_name(pctx, &namestr, &pos)) {
+            sym_undeclare(scope, namestr, pos);
+            string_free(parser_strctx(pctx), namestr);
         } else {
-            sym_undeclare(scope, lexeme_text(lex), parser_curpos(pctx));
+            log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__NAMEEXP);
         }
-        lexeme_free(parser_lexmemctx(pctx), lex);
         if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
             break;
         }
