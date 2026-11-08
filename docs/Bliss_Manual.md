@@ -1129,6 +1129,13 @@ ADDF (a, b, c);                         ! c = 5.5
 CMPF (a, b)                             ! -1
 ```
 
+Conversions `CVTxy (src, dst)` go between `F`, `D`, `G` and `L` or `I`
+(a signed `LONG`): `CVTFD`, `CVTDF`, `CVTFG`, `CVTGF`, `CVTFL`, `CVTDL`,
+`CVTGL`, `CVTFI`, `CVTDI`, `CVTLF`, `CVTLD`, `CVTLG`, `CVTIF`, `CVTID`.
+To an integer they truncate; `CVTRFL`, `CVTRDL`, `CVTRGL` round half away
+from zero. Conversions that can overflow (to an integer, or to `F`)
+return 1, or 0 on overflow (an integer result then saturates).
+
 ## 21. Linkages and condition handling
 
 (LRM 13, 17)

@@ -90,21 +90,41 @@ static struct {
 
 static LLVMValueRef gen_float(gencodectx_t gctx, void *fctx,
                               expr_node_t *node, LLVMTypeRef neededtype);
+static LLVMTypeRef flt_type(gencodectx_t gctx, char t);
 
 // Floating-point BUILTINs (BLISS-32 User Manual, chapter 4). All
-// operands are addresses. Types: F single, D and G double.
+// operands are addresses. Types: F single, D and G double, L and I
+// signed longword.
 struct fltop_s {
     const char *name;
-    char        op;     // + - * / (arithmetic), c (compare)
+    char        op;     // + - * / (arithmetic), c (compare),
+                        // v (convert), r (convert, rounded)
     char        type;
+    char        dtype;  // conversion result type
 };
 static struct fltop_s fltops[] = {
-    { "ADDF", '+', 'F' }, { "ADDD", '+', 'D' }, { "ADDG", '+', 'G' },
-    { "SUBF", '-', 'F' }, { "SUBD", '-', 'D' }, { "SUBG", '-', 'G' },
-    { "MULF", '*', 'F' }, { "MULD", '*', 'D' }, { "MULG", '*', 'G' },
-    { "DIVF", '/', 'F' }, { "DIVD", '/', 'D' }, { "DIVG", '/', 'G' },
-    { "CMPF", 'c', 'F' }, { "CMPD", 'c', 'D' }, { "CMPG", 'c', 'G' },
+    { "ADDF", '+', 'F', 0 }, { "ADDD", '+', 'D', 0 }, { "ADDG", '+', 'G', 0 },
+    { "SUBF", '-', 'F', 0 }, { "SUBD", '-', 'D', 0 }, { "SUBG", '-', 'G', 0 },
+    { "MULF", '*', 'F', 0 }, { "MULD", '*', 'D', 0 }, { "MULG", '*', 'G', 0 },
+    { "DIVF", '/', 'F', 0 }, { "DIVD", '/', 'D', 0 }, { "DIVG", '/', 'G', 0 },
+    { "CMPF", 'c', 'F', 0 }, { "CMPD", 'c', 'D', 0 }, { "CMPG", 'c', 'G', 0 },
+    { "CVTFD", 'v', 'F', 'D' }, { "CVTFG", 'v', 'F', 'G' },
+    { "CVTDF", 'v', 'D', 'F' }, { "CVTGF", 'v', 'G', 'F' },
+    { "CVTFL", 'v', 'F', 'L' }, { "CVTFI", 'v', 'F', 'I' },
+    { "CVTDL", 'v', 'D', 'L' }, { "CVTDI", 'v', 'D', 'I' },
+    { "CVTGL", 'v', 'G', 'L' },
+    { "CVTLF", 'v', 'L', 'F' }, { "CVTIF", 'v', 'I', 'F' },
+    { "CVTLD", 'v', 'L', 'D' }, { "CVTID", 'v', 'I', 'D' },
+    { "CVTLG", 'v', 'L', 'G' },
+    { "CVTRFL", 'r', 'F', 'L' }, { "CVTRDL", 'r', 'D', 'L' }, { "CVTRGL", 'r', 'G', 'L' },
 };
+
+// A conversion that can overflow (to an integer, or narrowing)
+// returns 1, or 0 on overflow
+#define FLT_HASVALUE(f_) ((f_)->op == 'c' || \
+    (((f_)->op == 'v' || (f_)->op == 'r') && \
+     ((f_)->dtype == 'L' || (f_)->dtype == 'I' || \
+      ((f_)->dtype == 'F' && (f_)->type != 'L' && (f_)->type != 'I'))))
 
 // Linkage functions (LRM 13.6); BUILTIN names
 static struct {
@@ -192,8 +212,8 @@ llvmgen_execfuncgen_init (gencodectx_t gctx)
         memset(&fdef, 0, sizeof(fdef));
         strcpy(fdef.name, fltops[i].name);
         fdef.namelen = strlen(fltops[i].name);
-        fdef.numargs = (fltops[i].op == 'c' ? 2 : 3);
-        fdef.flags = FUNC_M_BUILTIN | (fltops[i].op == 'c' ? 0 : FUNC_M_NOVALUE);
+        fdef.numargs = (strchr("+-*/", fltops[i].op) != 0 ? 3 : 2);
+        fdef.flags = FUNC_M_BUILTIN | (FLT_HASVALUE(&fltops[i]) ? 0 : FUNC_M_NOVALUE);
         fdef.generator = (execfuncgenerator_fn) gen_float;
         fdef.genfnctx = &fltops[i];
         if (execfunc_define(kwdscope, &fdef, 0) == 0) {
@@ -1210,11 +1230,102 @@ flt_type (gencodectx_t gctx, char t)
 } /* flt_type */
 
 /*
+ * flt_intrinsic
+ *
+ * Calls an overloaded math intrinsic, e.g. llvm.fabs.f32.
+ */
+static LLVMValueRef
+flt_intrinsic (gencodectx_t gctx, const char *name, LLVMTypeRef *types, size_t ntypes,
+               LLVMValueRef arg)
+{
+    unsigned int id = LLVMLookupIntrinsicID(name, strlen(name));
+    LLVMValueRef fn = LLVMGetIntrinsicDeclaration(gctx->module, id, types, ntypes);
+    LLVMTypeRef ftype = LLVMIntrinsicGetType(gctx->llvmctx, id, types, ntypes);
+
+    return LLVMBuildCall2(gctx->curfn->builder, ftype, fn, &arg, 1, "");
+
+} /* flt_intrinsic */
+
+/*
+ * flt_convert
+ *
+ * CVTxy (src, dst).
+ */
+static LLVMValueRef
+flt_convert (gencodectx_t gctx, struct fltop_s *f, LLVMValueRef src, LLVMValueRef dst,
+             LLVMTypeRef neededtype)
+{
+    LLVMBuilderRef b = gctx->curfn->builder;
+    LLVMTypeRef st = flt_type(gctx, f->type), dt = flt_type(gctx, f->dtype);
+    int sint = (f->type == 'L' || f->type == 'I');
+    int dint = (f->dtype == 'L' || f->dtype == 'I');
+    LLVMValueRef x = LLVMBuildLoad2(b, st, src, ""), r, ok = 0;
+
+    if (sint) {
+        r = LLVMBuildSIToFP(b, x, dt, "");
+    } else if (dint) {
+        LLVMTypeRef types[2];
+        if (f->op == 'r') {
+            // Round half away from zero without libm: truncate to a
+            // 64-bit integer, then step by one if the fraction is >= 1/2
+            LLVMTypeRef i64 = LLVMInt64TypeInContext(gctx->llvmctx);
+            LLVMValueRef t, frac, up, down, adj, small;
+            types[0] = i64;
+            types[1] = st;
+            t = flt_intrinsic(gctx, "llvm.fptosi.sat", types, 2, x);
+            frac = LLVMBuildFSub(b, x, LLVMBuildSIToFP(b, t, st, ""), "");
+            up = LLVMBuildZExt(b, LLVMBuildFCmp(b, LLVMRealOGE, frac,
+                                                LLVMConstReal(st, 0.5), ""), i64, "");
+            down = LLVMBuildZExt(b, LLVMBuildFCmp(b, LLVMRealOLE, frac,
+                                                  LLVMConstReal(st, -0.5), ""), i64, "");
+            adj = LLVMBuildSub(b, up, down, "");
+            small = LLVMBuildFCmp(b, LLVMRealOLT, flt_intrinsic(gctx, "llvm.fabs", &st, 1, x),
+                                  LLVMConstReal(st, 4611686018427387904.0), "");
+            t = LLVMBuildAdd(b, t, LLVMBuildSelect(b, small, adj, LLVMConstNull(i64), ""), "");
+            x = LLVMBuildSelect(b, small, LLVMBuildSIToFP(b, t, st, ""), x, "");
+        }
+        // In range: -2^31 <= x < 2^31 (false for NaN)
+        ok = LLVMBuildAnd(b,
+                LLVMBuildFCmp(b, LLVMRealOGE, x, LLVMConstReal(st, -2147483648.0), ""),
+                LLVMBuildFCmp(b, LLVMRealOLT, x, LLVMConstReal(st, 2147483648.0), ""), "");
+        types[0] = dt;
+        types[1] = st;
+        r = flt_intrinsic(gctx, "llvm.fptosi.sat", types, 2, x);
+    } else if (LLVMGetTypeKind(st) == LLVMGetTypeKind(dt)) {
+        r = x;      // D <-> G
+    } else if (f->dtype == 'F') {
+        // Narrowing: overflow if the result is infinite and x was not
+        LLVMValueRef inf_r, inf_x;
+        r = LLVMBuildFPTrunc(b, x, dt, "");
+        inf_r = LLVMBuildFCmp(b, LLVMRealOEQ, flt_intrinsic(gctx, "llvm.fabs", &dt, 1, r),
+                              LLVMConstReal(dt, 1.0/0.0), "");
+        inf_x = LLVMBuildFCmp(b, LLVMRealOEQ, flt_intrinsic(gctx, "llvm.fabs", &st, 1, x),
+                              LLVMConstReal(st, 1.0/0.0), "");
+        ok = LLVMBuildOr(b, LLVMBuildNot(b, inf_r, ""), inf_x, "");
+    } else {
+        r = LLVMBuildFPExt(b, x, dt, "");
+    }
+    LLVMBuildStore(b, r, dst);
+    if (ok != 0) {
+        return llvmgen_adjustval(gctx, LLVMBuildZExt(b, ok, gctx->fullwordtype, ""),
+                                 neededtype, 0);
+    }
+    if (neededtype != 0) {
+        expr_signal(gctx->ectx, STC__EXPRVALRQ);
+        return LLVMConstNull(neededtype);
+    }
+    return 0;
+
+} /* flt_convert */
+
+/*
  * gen_float
  *
  * Floating-point BUILTINs. ADDx (a, b, dst): dst = a + b;
  * SUBx (a, b, dst): dst = b - a; MULx; DIVx (divisor, dividend, quot):
  * quot = dividend / divisor; CMPx (a, b): -1, 0 or 1.
+ * CVTxy (src, dst) converts; to an integer it truncates (CVTRxy rounds
+ * half away from zero) and saturates.
  */
 static LLVMValueRef
 gen_float (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
@@ -1235,6 +1346,9 @@ gen_float (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtyp
     for (i = 0, arg = exprseq_head(expr_func_arglist(exp)); arg != 0 && i < 3;
          i++, arg = arg->tq_next) {
         addr[i] = llvmgen_expression(gctx, arg, ptrtype);
+    }
+    if (f->op == 'v' || f->op == 'r') {
+        return flt_convert(gctx, f, addr[0], addr[1], neededtype);
     }
     x = LLVMBuildLoad2(b, t, addr[0], "");
     y = LLVMBuildLoad2(b, t, addr[1], "");

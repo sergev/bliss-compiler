@@ -3,15 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T13. Floating-point conversions
-
-- `CVTxy (srca, dsta)` for F, D, G and longword integers (L, I):
-  CVTFD, CVTDF, CVTFG, CVTGF, CVTxL, CVTxI, CVTLx, CVTIx, rounded CVTRxL.
-- Conversions that can overflow (to integer, narrowing) return 1, or 0
-  on overflow; others NOVALUE. Truncate with `llvm.fptosi.sat`, round
-  half away from zero with `llvm.round`.
-- Test: conversions both ways, rounding, overflow status.
-
 ## T14. H-floating
 
 - `%H'...[Q exp]'` as 16 bytes (only in PLIT/INITIAL, more than a

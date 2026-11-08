@@ -9,7 +9,8 @@ LIBRARY 'testharness.lib';
 BUILTIN
     ADDF, SUBF, MULF, DIVF, CMPF,
     ADDD, SUBD, MULD, DIVD, CMPD,
-    ADDG, SUBG, MULG, DIVG, CMPG;
+    ADDG, SUBG, MULG, DIVG, CMPG,
+    CVTFD, CVTDF, CVTFL, CVTRFL, CVTDL, CVTRDL, CVTGL, CVTLF, CVTLD, CVTLG, CVTFG, CVTGF;
 
 OWN
     fa : LONG INITIAL (LONG (%E'1.5')),
@@ -20,14 +21,20 @@ OWN
     dc,
     ga : INITIAL (%G'0.5'),
     gb : INITIAL (%G'-3.0'),
-    gc;
+    gc,
+    ld : LONG,
+    lr : LONG,
+    big : INITIAL (%D'1.0D40'),
+    huge : INITIAL (%D'1.0D300'),
+    neg : LONG INITIAL (LONG (%E'-2.5')),
+    five : LONG INITIAL (LONG (-5));
 
-test_setup(numcases=3);
+test_setup(numcases=6);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL r1, r2, r3, r4;
-    CASE .caseno FROM 1 TO 3 OF
+    CASE .caseno FROM 1 TO 6 OF
     SET
         [1] : BEGIN
             ! SUBx (subtrahend, minuend, dst), DIVx (divisor, dividend, quot)
@@ -49,6 +56,35 @@ BEGIN
         [3] : test_output(.caseno, 'cmp=%ld,%ld,%ld,%ld,%ld', CMPF (fa, fb), CMPF (fb, fa),
                           CMPF (fa, fa), CMPD (da, db), CMPG (gb, ga));
 !! 3 cmp=-1,1,0,1,-1
+        [4] : BEGIN
+            ! Float to longword: truncated, or rounded half away from zero
+            CVTFL (neg, ld); r1 = .ld;
+            CVTRFL (neg, lr); r2 = .lr;
+            CVTRDL (db, lr); r3 = .lr;
+            CVTGL (gb, ld); r4 = .ld;
+            test_output(.caseno, 'tolong=%ld,%ld,%ld,%ld', .r1<0, 32, 1>, .r2<0, 32, 1>,
+                        .r3<0, 32, 1>, .r4<0, 32, 1>);
+        END;
+!! 4 tolong=-2,-3,3,-3
+        [5] : BEGIN
+            ! Longword to float, and between F, D and G
+            CVTLF (five, fc); r1 = .fc;
+            CVTLD (five, dc); r2 = .dc;
+            CVTFD (fa, dc); r3 = .dc;
+            CVTDF (da, fc); r4 = .fc;
+            test_output(.caseno, 'tofloat=%lx,%lx,%lx,%lx', .r1, .r2, .r3, .r4);
+        END;
+!! 5 tofloat=c0a00000,c014000000000000,3ff8000000000000,41200000
+        [6] : BEGIN
+            ! Overflow status: 1, or 0 if the value does not fit
+            r1 = CVTDL (big, ld);
+            r2 = .ld;
+            r3 = CVTDF (huge, fc);
+            r4 = CVTDF (da, fc);
+            test_output(.caseno, 'overflow=%ld,%ld,%ld,%ld,%ld', .r1, .r2<0, 32, 1>, .r3, .r4,
+                        CVTRFL (fa, lr));
+        END;
+!! 6 overflow=0,2147483647,0,1,1
     TES;
 END;
 
