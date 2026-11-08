@@ -553,7 +553,7 @@ parser_fopen (parse_ctx_t pctx, const char *fname, size_t fnlen, char **actnamep
         status = lexer_fopen(pctx->lexctx, pp.path_fullname, pp.path_fullnamelen, actnamep);
         if (status) break;
 
-    } while (do_search && i++ <= pctx->searchpathcount);
+    } while (do_search && ++i <= pctx->searchpathcount);
 
     file_freeparts(pctx->fioctx, &pp);
     file_freeparts(pctx->fioctx, &mainpp);
