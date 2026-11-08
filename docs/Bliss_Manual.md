@@ -3,7 +3,9 @@
 A short guide to the BLISS programming language for programmers who know C,
 Python or JavaScript. For full details see the *BLISS Language Reference
 Manual* (DEC, 1987), [bliss-language-reference-manual.pdf](bliss-language-reference-manual.pdf).
-References like **LRM 6.3** point to its sections.
+References like **LRM 6.3** point to its sections. **UM 5.2** points to the
+*BLISS-32 User Manual* (DEC, AA-H322E-TE, 1987), which covers the VAX
+compiler, its builtins and common coding errors.
 
 Notes marked **blissc** describe this compiler (BLISS-M, x86-64 back end).
 
@@ -900,6 +902,20 @@ A library is made by compiling a file of declarations with
 `-I dir` adds a search directory. `%REQUIRE ('file')` includes a file
 from inside an expression or macro.
 
+The two are not interchangeable (UM 5.1):
+
+- A library source may hold only declarations that make no storage or
+  code: `LITERAL`, `MACRO`, `KEYWORDMACRO`, `FIELD`, `STRUCTURE`, `BIND`,
+  `EXTERNAL`, `BUILTIN`, `LINKAGE`, `COMPILETIME`, `REQUIRE`, `LIBRARY`,
+  `SWITCHES`, `UNDECLARE`. `GLOBAL` and `OWN` belong in a module.
+- `%IF`, macro calls and `SWITCHES` in a library source take effect when
+  the library is compiled, not in the module that uses it. A `REQUIRE` file
+  is re-read each time, so it can depend on the module's switches,
+  `%VARIANT` or `%DECLARED`.
+- A library file works only with the compiler that made it.
+
+Pick one form for each set of declarations.
+
 ## 18. Character handling (CH$)
 
 (LRM 20)
@@ -973,7 +989,9 @@ Common module switches:
 
 **blissc:** `MAIN = r` generates a C `main` that calls `r` (passing 0 for
 any parameters) and returns its value as the exit status; 0 if `r` is
-`NOVALUE`. `MAIN` is a reserved word in blissc. `LANGUAGE`,
+`NOVALUE`. On VMS the main routine returns a condition value, odd meaning
+success (UM 5.4); in blissc return 0 for success, as in C. `MAIN` is a
+reserved word in blissc. `LANGUAGE`,
 `ADDRESSING_MODE` and `ENVIRONMENT` are accepted and ignored.
 
 A program is several modules linked together; they share data and routines
@@ -997,6 +1015,18 @@ builtins are `MOVSB (n, src, dst)` and `STOSB (ch, n, dst)`, which return
 the destination pointer advanced past what they wrote, plus `CMPSB`,
 `SCASB_REPE`, `SCASB_REPNE` and `SCASB_CMP`, used by the `CH$` functions.
 
+When porting BLISS-32 code: the VAX builtins (`ADDF`, `MOVC3`, `PROBER`
+and about 90 others, UM 4) take **every operand by address**, even small
+input values, and most store their result through a destination address:
+
+```bliss
+BUILTIN ADDF;
+ADDF (a, b, sum);               ! sum = .a + .b, as F-floating
+PROBER (mode, %REF (.len), .p)  ! a value is passed as %REF (value)
+```
+
+blissc does not have them.
+
 ## 21. Linkages and condition handling
 
 (LRM 13, 17)
@@ -1010,8 +1040,13 @@ These were tied to DEC operating systems.
   stack (`SETUNWIND`). `SIGNAL_STOP` raises a fatal condition. This is
   like exceptions, built on the VMS condition-handling mechanism.
 
-**blissc:** user `LINKAGE` declarations, `ENABLE`, `SIGNAL` and
-`ACTUALCOUNT` are not implemented. Routines use the platform C calling
+A **general routine call** names the linkage explicitly and takes the
+routine address as its first argument: `BLISS (.l, 0)` calls the routine
+whose address is in `l` (LRM 12.2, UM 5.2.5). With the default linkage,
+`(.l) (0)` does the same.
+
+**blissc:** user `LINKAGE` declarations, general routine calls, `ENABLE`,
+`SIGNAL` and `ACTUALCOUNT` are not implemented. Routines use the platform C calling
 convention, so BLISS and C code can call each other directly.
 
 ## 22. Pitfalls for C programmers
@@ -1020,6 +1055,11 @@ convention, so BLISS and C code can call each other directly.
 |---|---|---|
 | `x = y + 1` | `x = .y + 1` | `y` is an address; fetch with `.` |
 | `IF .flags THEN` | `IF .flags NEQ 0 THEN` | tests look only at the low bit |
+| `IF .x AND 2 THEN` | `IF (.x AND 2) NEQ 0 THEN` | bit 0 of `.x AND 2` is always 0 |
+| `IF .a THEN x = 1; ELSE x = 2` | `IF .a THEN x = 1 ELSE x = 2` | `;` ends the `IF`; the `ELSE` is then an error |
+| `.l (0)` to call through `l` | `(.l) (0)` | `.l (0)` calls the routine *at* `l`, then fetches |
+| `OWN x : BYTE; ... .x EQL -5` | `OWN x : BYTE SIGNED` | small fields are unsigned by default, so the test is always false |
+| `DECRU i FROM .n TO 0` | `DECRU i FROM .n + 1 TO 1` | an unsigned `i` never drops below 0: endless loop |
 | `x = 2 ^ 3` expecting 8 | `x = 2 * 2 * 2` | `^` is a shift: `2 ^ 3` = 16 |
 | `p + 1` to get the next word | `p + %UPVAL` | addresses count bytes |
 | `x = IF ... THEN 1 ELSE 2 + 3` | `x = (IF ... THEN 1 ELSE 2) + 3` | control expressions as operands need parentheses |
