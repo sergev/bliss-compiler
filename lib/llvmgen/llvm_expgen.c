@@ -137,7 +137,11 @@ llvmgen_addr_expression (gencodectx_t gctx, expr_node_t *exp,
             }
         }
     } else {
-        if (accinfo != 0) accinfo->flags |= LLVMGEN_M_ACC_GENEXPR;
+        if (accinfo != 0) {
+            accinfo->flags |= LLVMGEN_M_ACC_GENEXPR;
+            // Computed address: default to fullword access
+            if (accinfo->width == 0) accinfo->width = machine_scalar_bits(gctx->mach);
+        }
         addr = llvmgen_expression(gctx, base, gctx->unitptrtype);
     }
 
