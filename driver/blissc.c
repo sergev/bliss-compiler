@@ -249,8 +249,8 @@ main (int argc, char *argv[])
     volatile int status = 0;
 
     if (setjmp(retenv)) {
-        status = 1;
-        goto finish;
+        // Fatal error: data structures may be inconsistent, skip cleanup
+        return 1;
     }
     cctx = blissc_init(retenv);
     parse_args(cctx, argc, argv);
