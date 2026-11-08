@@ -63,15 +63,25 @@ configure_file(${CMAKE_SOURCE_DIR}/cmake/config.h.in ${blissc_BINARY_DIR}/includ
 
 if (${Python3_FOUND})
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
-add_custom_target(testharness
+add_custom_target(testharness ALL
         COMMAND $<TARGET_FILE:blissc> --library -o ${CMAKE_BINARY_DIR}/tests/testharness.lib ${CMAKE_SOURCE_DIR}/tests/testharness.req
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
         DEPENDS blissc)
 
-add_custom_target(check ALL
+add_custom_target(check
         COMMAND python3 "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc="${CMAKE_C_COMPILER}" "${CMAKE_SOURCE_DIR}/tests"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
         DEPENDS testharness blissc)
+
+# One CTest test per .bli file
+enable_testing()
+file(GLOB_RECURSE BLISS_TESTS RELATIVE ${CMAKE_SOURCE_DIR}/tests CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/*.bli)
+foreach(test ${BLISS_TESTS})
+  string(REGEX REPLACE "\\.bli$" "" name ${test})
+  add_test(NAME ${name}
+           COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/runtests.py" --blissc=$<TARGET_FILE:blissc> --cc=${CMAKE_C_COMPILER} "${CMAKE_SOURCE_DIR}/tests/${test}"
+           WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+endforeach()
 else()
   message(No Python3 - omitting compiler tests)
 endif()

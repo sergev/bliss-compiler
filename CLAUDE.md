@@ -16,14 +16,13 @@ make clean      # rm -rf build
 
 Pass `-DLLVM_CONFIG=<path-to-llvm-config>` to cmake to pick a specific LLVM. Requires LLVM 17+ (tested with 21): the back end uses opaque pointers (`LLVMBuildLoad2`/`GEP2`/`Call2` with explicit element/function types; GEPs on unit pointers use `gctx->unittype`) and the new pass manager (`LLVMRunPasses` in `gencode_module_end`).
 
-The CMake `check` target is part of `ALL`, so every `make` also compiles `tests/testharness.req` into `testharness.lib` and runs the full test suite (needs Python 3). `make test` runs `ctest`, but no CTest tests are registered; rely on the `check` output.
-
-Run a single test (from `build/tests`, where `testharness.lib` lives):
+`make` also compiles `tests/testharness.req` into `build/tests/testharness.lib`. `make test` runs `ctest`, which has one test per `tests/**/*.bli` file, named by its path without the extension (needs Python 3). Run a single test:
 
 ```
-cd build/tests
-python3 ../../tests/runtests.py --blissc=../blissc ../../tests/lexical/literals.bli
+ctest --test-dir build -R lexical/literals --output-on-failure
 ```
+
+`make -C build check` runs the whole suite through one `runtests.py` invocation.
 
 `tests/Makefile` is a legacy in-tree runner; it leaves ignored binaries and `.o` files in `tests/`.
 
