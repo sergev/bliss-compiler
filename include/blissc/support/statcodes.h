@@ -184,7 +184,8 @@ STATCODE(133,E,REGNUMERR, "invalid or missing register number (!IL)") \
 STATCODE(134,E,ENBLRTN,   "ENABLE must be in the outermost block of a routine, once") \
 STATCODE(135,E,ENBLARG,   "ENABLE actual must be the name of an OWN, GLOBAL or LOCAL data segment") \
 STATCODE(136,E,INTRPARMS, "INTERRUPT routine needs a frame-address formal and an optional error-code formal") \
-STATCODE(137,E,INTRCALL,  "INTERRUPT routine cannot be called")
+STATCODE(137,E,INTRCALL,  "INTERRUPT routine cannot be called") \
+STATCODE(138,E,FLTLITERR, "invalid floating-point literal !SD")
 
 typedef unsigned int statcode_t;
 #ifdef STATCODES_INSTANTIATE

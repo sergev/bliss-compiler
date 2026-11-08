@@ -22,12 +22,16 @@ BIND
 
 EXTERNAL ROUTINE
     test_dsc_check;
+
+! Floating-point literals (LRM 4.2): IEEE bit patterns
+OWN
+    fv : VECTOR [2, LONG] INITIAL (LONG (%E'1.5', %E'-2.5E1'));
     
-test_setup(numcases=13);
+test_setup(numcases=15);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 13 OF
+    CASE .caseno FROM 1 TO 15 OF
     SET
         [1] : test_output(.caseno, 'a = [%d,0x%x]', a, a);
 !! 1 a = [65535,0xffff]
@@ -58,6 +62,10 @@ BEGIN
 !!12 l = "described string" (length=16,type=14,class=1)
        [13] : test_output(.caseno, 'ascid from C = %ld', test_dsc_check (%ASCID 'from C'));
 !!13 ascid from C = 6
+       [14] : test_output(.caseno, 'float = %lx,%lx,%lx,%lx', %E'1.5', %E'-2.5E1', %D'1.5', %G'1.0G-2');
+!!14 float = 3fc00000,c1c80000,3ff8000000000000,3f847ae147ae147b
+       [15] : test_output(.caseno, 'float initial = %lx,%lx', .fv[0], .fv[1]);
+!!15 float initial = 3fc00000,c1c80000
     TES;
 END;
 

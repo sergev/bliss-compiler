@@ -184,7 +184,13 @@ Relational operators yield `1` (true) or `0` (false). Tests (`IF`,
 `%B`, `%O`, `%X`, `%DECIMAL` may have a sign inside the quotes:
 `%B'-1111'` = -15.
 
-**blissc:** floating-point literals are not supported.
+A floating-point literal's value is its bit pattern, a plain number;
+BLISS has no float arithmetic operators. The exponent letter matches the
+type: `%E'2.5E-3'`, `%D'1.0D10'`, `%G'1.0G10'`, `%H'1.0Q10'`.
+
+**blissc:** `%E` is an IEEE single (32 bits, e.g. `%E'1.5'` =
+`%X'3FC00000'`), `%D` and `%G` are IEEE doubles. `%H` is not supported
+yet. Store `%E` values in `LONG` data: `INITIAL (LONG (%E'1.5'))`.
 
 ### Strings
 

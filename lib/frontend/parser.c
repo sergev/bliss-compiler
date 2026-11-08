@@ -57,6 +57,8 @@ struct parse_ctx_s {
     DODEF(ASCII, parse_string_literal) \
     DODEF(ASCIC, parse_string_literal) \
     DODEF(ASCIZ, parse_string_literal) DODEF(ASCID, parse_ASCID) \
+    DODEF(E, parse_float_literal) DODEF(D, parse_float_literal) \
+    DODEF(G, parse_float_literal) \
     DODEF(B, parse_numeric_literal) \
     DODEF(O, parse_numeric_literal) \
     DODEF(DECIMAL, parse_numeric_literal) \
@@ -1283,6 +1285,64 @@ parse_string_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t cu
     return 1;
 
 } /* parse_string_literal */
+
+/*
+ * parse_float_literal
+ *
+ * %E'mantissa{E exponent}', %D'...{D exponent}', %G'...{G exponent}'
+ * (LRM 4.2): the bit pattern of an IEEE single (%E) or double (%D, %G)
+ * as a numeric literal.
+ */
+static int
+parse_float_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t curlt)
+{
+    lexeme_t *lex;
+    lextype_t lt = parser_next(pctx, ql, &lex);
+    strdesc_t *str = lexeme_text(lex), *num;
+    char buf[128], *p, *end, expchar;
+    size_t i;
+    int ok = (lt == LEXTYPE_STRING && str->len > 0 && str->len < sizeof(buf));
+    long bits = 0;
+
+    expchar = (curlt == LEXTYPE_LXF_E ? 'E' : curlt == LEXTYPE_LXF_D ? 'D' : 'G');
+    if (ok) {
+        // Mantissa: sign, digits, point; then the exponent letter
+        for (i = 0, p = buf; i < str->len; i++) {
+            char c = str->ptr[i];
+            if (c >= 'a' && c <= 'z') c = (char) (c - 'a' + 'A');
+            if (c == expchar) {
+                c = 'E';
+            } else if (!(c >= '0' && c <= '9') && c != '.' && c != '+' && c != '-') {
+                ok = 0;
+            }
+            *p++ = c;
+        }
+        *p = '\0';
+    }
+    if (ok) {
+        if (curlt == LEXTYPE_LXF_E) {
+            float f = strtof(buf, &end);
+            unsigned int u;
+            memcpy(&u, &f, sizeof(u));
+            bits = (long) u;
+            ok = (*end == '\0' && end != buf && f - f == 0);
+        } else {
+            double d = strtod(buf, &end);
+            memcpy(&bits, &d, sizeof(bits));
+            ok = (*end == '\0' && end != buf && d - d == 0);
+        }
+    }
+    if (!ok) {
+        log_signal(pctx->logctx, pctx->curpos, STC__FLTLITERR, str);
+        bits = 0;
+    }
+    num = string_printf(pctx->strctx, 0, "%ld", bits);
+    parser_lexeme_add(pctx, LEXTYPE_NUMERIC, num);
+    string_free(pctx->strctx, num);
+    lexeme_free(pctx->lmemctx, lex);
+    return 1;
+
+} /* parse_float_literal */
 
 /*
  * parse_ASCID

@@ -1,0 +1,14 @@
+MODULE test =
+BEGIN
+
+! A floating-point literal has a mantissa and an exponent with the
+! letter of its type (LRM 4.2).
+
+LITERAL
+    a = %E'1x',
+!! cerr %BLISS-E-FLTLITERR,
+    b = %D'1.0E2';
+!! cerr %BLISS-E-FLTLITERR,
+
+END
+ELUDOM
