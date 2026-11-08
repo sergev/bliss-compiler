@@ -8,13 +8,15 @@
 # Distributed under license.  See LICENSE.TXT for details.
 
 BLISSC = ../build/blissc
+RUNTIME = ../build/libblissrt.a
 TESTDIR = .
 PYTHON = python3
 
 .PHONY: check all install distdir dist
 
 check: testharness.lib
-	$(PYTHON) "$(TESTDIR)/runtests.py" --blissc="$(BLISSC)" --cc="$(CC)" "$(TESTDIR)"
+	cp ../build/tests/*.lib .
+	$(PYTHON) "$(TESTDIR)/runtests.py" --blissc="$(BLISSC)" --cc="$(CC)" --runtime="$(RUNTIME)" "$(TESTDIR)"
 
 testharness.lib: $(TESTDIR)/testharness.req
 	$(BLISSC) --library -o $@ $<

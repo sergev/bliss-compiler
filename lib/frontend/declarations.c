@@ -1532,6 +1532,7 @@ declare_routine (expr_ctx_t ctx, scopectx_t scope, decltype_t dt, int is_bind)
             attr.flags |= SYM_M_NOVALUE;
             if (dt != DCL_EXTERNAL && dt != DCL_FORWARD && !is_bind && (n < 1 || n > 2)) {
                 expr_signal(ctx, STC__INTRPARMS);
+                attr.linkage = LNKTYPE_CALL;  // LLVM rejects the prototype
             }
         }
         np = rtnsym_declare(scope, namestr, &attr, pos);

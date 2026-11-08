@@ -77,7 +77,7 @@ def process_test(testfile, blissc, cc, testharness, runtime=None, quiet=False, p
             print(("  FAIL: compilation failed ({}) for {}" +
                    "\n        {}").format(err.returncode, testfile,
                                           '\n        '.join([line for line in err.stderr.split('\n')])))
-            return cases, 0, cases
+            return cases, 0, max(cases, 1)
 
     for s in compout:
         if s in o:
@@ -121,18 +121,19 @@ def process_test(testfile, blissc, cc, testharness, runtime=None, quiet=False, p
     standalone = status is not None or any(not s.startswith('TEST ') for s in runout)
     try:
         subprocess.run([cc, '-o', barename] + ([] if standalone else [testharness]) +
-                       [barename + '.o'] + ([runtime] if runtime else []), check=True)
+                       [barename + '.o'] + ([runtime] if runtime else []),
+                       capture_output=True, encoding='utf-8', check=True)
     except subprocess.CalledProcessError as e:
         print(("  FAIL: linking {} into test harness failed" +
               "\n        {}").format(barename + '.o', '\n        '.join([line for line in e.stderr.split('\n')])))
-        return cases, 0, cases
+        return cases, 0, max(cases, 1)
     try:
         dorun = subprocess.run(['./' + barename], capture_output=True, encoding='utf-8',
                                check=not standalone)
     except subprocess.CalledProcessError as e:
         print(("  FAIL: test harness failed to run for {}" +
               "\n        {}").format(testfile, '\n        '.join([line for line in e.stderr.split('\n')])))
-        return cases, 0, cases
+        return cases, 0, max(cases, 1)
 
     o = dorun.stdout.split('\n')
     passes = 0
