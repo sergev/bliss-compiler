@@ -5,7 +5,7 @@ BEGIN
 ! address relations, DECRA, VOLATILE, PSECT, FORWARD/EXTERNAL data,
 ! EXTERNAL/GLOBAL LITERAL, GLOBAL BIND, general structure references,
 ! SWITCHES, REQUIRE, %REQUIRE, %QUOTENAME, CH$SIZE,
-! CODECOMMENT, BUILTIN, QUAD, UNDECLARE, low-bit tests.
+! CODECOMMENT, BUILTIN, QUAD, UNDECLARE, low-bit tests, WEAK.
 
 LIBRARY 'testharness.lib';
 REQUIRE 'misc.req';
@@ -27,6 +27,21 @@ GLOBAL LITERAL
 EXTERNAL ROUTINE
     test_globlit_value;
 
+! WEAK (LRM 9.14): an unresolved weak EXTERNAL is 0; a strong
+! definition (in testharness.c) overrides a weak GLOBAL.
+EXTERNAL
+    test_nodata : WEAK;
+EXTERNAL ROUTINE
+    test_nortn : WEAK,
+    test_weaklit_value;
+EXTERNAL LITERAL
+    test_nolit : WEAK;
+GLOBAL
+    test_wkdata : WEAK INITIAL (5);
+GLOBAL ROUTINE test_wkrtn : WEAK = 1;
+GLOBAL LITERAL
+    test_weaklit = 33 : WEAK;
+
 PSECT
     OWN = mydata;
 
@@ -46,13 +61,13 @@ UNDECLARE tmp;
 BUILTIN
     MOVSB;
 
-test_setup(numcases=22);
+test_setup(numcases=24);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL a, b, p;
 
-    CASE .caseno FROM 1 TO 22 OF
+    CASE .caseno FROM 1 TO 24 OF
     SET
         [1] : test_output(.caseno, 'comment=%ld', 1 %( + 100
                                                    + 200 )% + 2);
@@ -138,6 +153,12 @@ BEGIN
 !! 21 extlit=1230,1234,1235
         [22] : test_output(.caseno, 'globlit=%ld,%ld', test_globlit, test_globlit_value ());
 !! 22 globlit=-77,-77
+        [23] : test_output(.caseno, 'weakext=%ld,%ld,%ld', test_nodata EQLA 0,
+                           test_nortn EQLA 0, test_nolit);
+!! 23 weakext=1,1,0
+        [24] : test_output(.caseno, 'weakgbl=%ld,%ld,%ld', .test_wkdata, test_wkrtn (),
+                           test_weaklit_value ());
+!! 24 weakgbl=7,2,33
     TES;
 END;
 

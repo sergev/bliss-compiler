@@ -1,0 +1,16 @@
+MODULE test =
+BEGIN
+
+! WEAK is only for GLOBAL and EXTERNAL declarations (LRM 9.14).
+
+OWN
+    x : WEAK;
+!! cerr %BLISS-E-WEAKNOTGBL,
+LITERAL
+    y = 1 : WEAK;
+!! cerr %BLISS-E-WEAKNOTGBL,
+ROUTINE r : WEAK = 0;
+!! cerr %BLISS-E-WEAKNOTGBL,
+
+END
+ELUDOM

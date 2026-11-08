@@ -20,6 +20,12 @@ __asm__(".globl TEST_EXTLIT\n.set TEST_EXTLIT, 1234");
 extern char TEST_GLOBLIT[] __attribute__((weak));   /* defined by misc.bli */
 long TEST_GLOBLIT_VALUE (void) { return (long) TEST_GLOBLIT; }
 
+/* WEAK: strong definitions override misc.bli's weak GLOBALs */
+long TEST_WKDATA = 7;
+long TEST_WKRTN (void) { return 2; }
+extern char TEST_WEAKLIT[] __attribute__((weak));
+long TEST_WEAKLIT_VALUE (void) { return (long) TEST_WEAKLIT; }
+
 /* ACTUALCOUNT from C: set bliss_argcount before the call */
 __thread long bliss_argcount __attribute__((weak));
 extern long TEST_AVERAGE (long, long, long) __attribute__((weak));   /* defined by routines.bli */

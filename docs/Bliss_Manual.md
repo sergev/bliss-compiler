@@ -475,7 +475,8 @@ Attributes follow a name after `:`.
 | `VOLATILE` | always fetch/store through memory |
 | `PSECT (name)` | put in a named program section |
 | `NOVALUE` | routine returns no value |
-| `LINKAGE`, `ADDRESSING_MODE`, `WEAK`, `RANGE` | target-specific; see LRM 9 |
+| `WEAK` | `GLOBAL`/`EXTERNAL` only: a missing `EXTERNAL` is 0; another `GLOBAL` of that name wins |
+| `LINKAGE`, `ADDRESSING_MODE`, `RANGE` | target-specific; see LRM 9 |
 
 ```bliss
 OWN
@@ -487,6 +488,11 @@ OWN
     sparse : VECTOR [10] PRESET ([0] = 1, [9] = 100),
     buf : VECTOR [64, BYTE] ALIGN (3),
     port : VOLATILE;
+```
+
+```bliss
+EXTERNAL ROUTINE trace_hook : WEAK;     ! optional: may not be linked in
+IF trace_hook NEQA 0 THEN trace_hook ();
 ```
 
 A `SIGNED BYTE` holding 255 reads back as -1; an `UNSIGNED BYTE` (the

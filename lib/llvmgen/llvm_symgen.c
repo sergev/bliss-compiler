@@ -159,11 +159,13 @@ litsym_generator (void *vctx, name_t *np, void *p)
         if (v == 0) {
             v = LLVMAddGlobal(gctx->module, gctx->unittype, name_azstring(np));
         }
+        if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(v, LLVMExternalWeakLinkage);
         ll->value = v;
     } else if (attr->sc == SYMSCOPE_GLOBAL) {
         v = LLVMConstInt(gctx->fullwordtype, (unsigned long long int) name_value_signed(np), 1);
         v = LLVMConstIntToPtr(v, LLVMPointerTypeInContext(gctx->llvmctx, 0));
         ll->value = LLVMAddAlias2(gctx->module, gctx->unittype, 0, v, name_azstring(np));
+        if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(ll->value, LLVMWeakAnyLinkage);
     }
 
     return 1;
@@ -639,10 +641,13 @@ datasym_generator (void *vctx, name_t *np, void *p)
             ld->type = type;
             ld->vclass = LLVM_REG;
             if (LLVMGetTypeKind(LLVMTypeOf(bindval)) == LLVMPointerTypeKind) {
-                LLVMAddAlias2(gctx->module, gctx->unittype, 0, bindval, name_azstring(np));
+                LLVMValueRef a = LLVMAddAlias2(gctx->module, gctx->unittype, 0, bindval,
+                                               name_azstring(np));
+                if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(a, LLVMWeakAnyLinkage);
             } else {
                 char buf[256];
-                snprintf(buf, sizeof(buf), ".globl %s\n.set %s, %lld", name_azstring(np),
+                snprintf(buf, sizeof(buf), ".%s %s\n.set %s, %lld",
+                         (attr->flags & SYM_M_WEAK) != 0 ? "weak" : "globl", name_azstring(np),
                          name_azstring(np), LLVMConstIntGetSExtValue(bindval));
                 LLVMAppendModuleInlineAsm(gctx->module, buf, strlen(buf));
             }
@@ -672,6 +677,9 @@ datasym_generator (void *vctx, name_t *np, void *p)
         }
         if (name_globalname(namectx, np) == 0) {
             LLVMSetLinkage(ld->value, LLVMInternalLinkage);
+        } else if ((attr->flags & SYM_M_WEAK) != 0) {
+            LLVMSetLinkage(ld->value, attr->sc == SYMSCOPE_EXTERNAL
+                           ? LLVMExternalWeakLinkage : LLVMWeakAnyLinkage);
         }
         if (attr->alignment != 0) {
             LLVMSetAlignment(ld->value, 1U<<attr->alignment);
@@ -774,6 +782,7 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     if (proto_only) {
         lr->type = LLVMFunctionType(lr->returntype, 0, 0, 1);
         lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
+        if ((attr->flags & SYM_M_WEAK) != 0) LLVMSetLinkage(lr->func, LLVMExternalWeakLinkage);
         return 1;
     }
     if ((attr->flags & SYM_M_BIND) != 0) {
@@ -820,7 +829,8 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
         LLVMDeleteFunction(extantfn);
     }
     if (name_globalname(expr_namectx(gctx->ectx), np) != 0) {
-        LLVMSetLinkage(lr->func, LLVMExternalLinkage);
+        LLVMSetLinkage(lr->func, (attr->flags & SYM_M_WEAK) != 0
+                       ? LLVMWeakAnyLinkage : LLVMExternalLinkage);
     } else {
         LLVMSetLinkage(lr->func, LLVMInternalLinkage);
     }

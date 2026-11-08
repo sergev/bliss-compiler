@@ -732,7 +732,7 @@ datasym_serialize (void *vctx, name_t *np, void *fh)
         }
     }
     serattr.units = attr->units;
-    serattr.flags = attr->flags & (SYM_M_VOLATILE|SYM_M_ALIAS|SYM_M_REF|SYM_M_SIGNEXT|SYM_M_BIND);
+    serattr.flags = attr->flags & (SYM_M_VOLATILE|SYM_M_ALIAS|SYM_M_REF|SYM_M_SIGNEXT|SYM_M_BIND|SYM_M_WEAK);
     serattr.alignment = attr->alignment;
     serattr.width = attr->width;
     serattr.symscope = (unsigned int) attr->sc;
@@ -891,7 +891,7 @@ rtnsym_serialize (void *vctx, name_t *np, void *fh)
             return 0;
         }
     }
-    serattr.flags = attr->flags & (SYM_M_BIND|SYM_M_NOVALUE|SYM_M_REF);
+    serattr.flags = attr->flags & (SYM_M_BIND|SYM_M_NOVALUE|SYM_M_REF|SYM_M_WEAK);
     serattr.symscope = (unsigned int) attr->sc;
     serattr.incount = namereflist_length(&attr->inargs);
     serattr.outcount = namereflist_length(&attr->outargs);

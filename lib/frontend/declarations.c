@@ -70,6 +70,7 @@ static namedef_t decl_names[] = {
     NAMEDEF("UNSIGNED", LEXTYPE_ATTR_UNSIGNED, NAME_M_RESERVED),
     NAMEDEF("VOLATILE", LEXTYPE_ATTR_VOLATILE, NAME_M_RESERVED),
     NAMEDEF("ALIAS", LEXTYPE_ATTR_ALIAS, NAME_M_RESERVED),
+    NAMEDEF("WEAK", LEXTYPE_ATTR_WEAK, NAME_M_RESERVED),
     NAMEDEF("INITIAL", LEXTYPE_ATTR_INITIAL, NAME_M_RESERVED),
     NAMEDEF("PRESET", LEXTYPE_ATTR_PRESET, NAME_M_RESERVED),
     NAMEDEF("ALIGN", LEXTYPE_ATTR_ALIGN, NAME_M_RESERVED),
@@ -242,7 +243,16 @@ declare_literal (expr_ctx_t ctx, scopectx_t scope, decltype_t decltype)
 
         lt = parser_next(pctx, QL_NORMAL, 0);
         if (lt == LEXTYPE_DELIM_COLON) {
+          while (1) {
             lt = parser_next(pctx, QL_NORMAL, 0);
+            if (lt == LEXTYPE_ATTR_WEAK) {
+                // WEAK only for GLOBAL and EXTERNAL literals (LRM 14.1.2)
+                if (decltype != DCL_GLOBAL && decltype != DCL_EXTERNAL) {
+                    expr_signal(ctx, STC__WEAKNOTGBL);
+                }
+                attr.flags |= SYM_M_WEAK;
+                continue;
+            }
             if (lt == LEXTYPE_ATTR_SIGNED || lt == LEXTYPE_ATTR_UNSIGNED) {
                 long rval;
                 attr.flags |= (lt == LEXTYPE_ATTR_SIGNED) ? SYM_M_SIGNEXT : 0;
@@ -265,9 +275,10 @@ declare_literal (expr_ctx_t ctx, scopectx_t scope, decltype_t decltype)
                     string_free(expr_strctx(ctx), namestr);
                     return 0;
                 }
+                continue;
             }
-            // now get the semicolon or comma, for later
-            lt = parser_next(pctx, QL_NORMAL, 0);
+            break;  // lt is the semicolon or comma
+          }
         }
 
         attr.sc = (decltype == DCL_GLOBAL ? SYMSCOPE_GLOBAL
@@ -890,10 +901,11 @@ handle_data_attrs (expr_ctx_t ctx, scopectx_t scope, decltype_t dt,
     parse_ctx_t pctx = expr_parse_ctx(ctx);
     machinedef_t *mach = expr_machinedef(ctx);
     int saw_au, saw_ext, saw_align, saw_init, saw_vol,
-        saw_alias, saw_psect, saw_stru, saw_field, saw_preset;
+        saw_alias, saw_psect, saw_stru, saw_field, saw_preset, saw_weak;
     int did1;
 
     saw_au = saw_ext = saw_align = saw_init = saw_vol = saw_alias = saw_psect = 0;
+    saw_weak = (dt == DCL_GLOBAL || dt == DCL_EXTERNAL) ? 0 : -1;
     saw_stru = 0;
     saw_field = saw_preset = -1; // not allowed until saw_stru
 
@@ -1002,6 +1014,14 @@ handle_data_attrs (expr_ctx_t ctx, scopectx_t scope, decltype_t dt,
                 saw_vol = -1;
                 saw_alias = 1;
                 attr->flags |= SYM_M_ALIAS;
+            }
+        }
+        if (saw_weak <= 0) {
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_ATTR_WEAK, 0, 1)) {
+                if (saw_weak < 0) expr_signal(ctx, STC__WEAKNOTGBL);
+                did1 = 1;
+                saw_weak = 1;
+                attr->flags |= SYM_M_WEAK;
             }
         }
 
@@ -1341,7 +1361,7 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                       decltype_t dt, routine_attr_t *attr)
 {
     parse_ctx_t pctx = expr_parse_ctx(ctx);
-    int saw_psect, saw_novalue; // XXX need to handle linkage here
+    int saw_psect, saw_novalue, saw_weak; // XXX need to handle linkage here
     int did1;
     int which;
     static lextype_t delims[3] = { LEXTYPE_DELIM_SEMI,
@@ -1349,6 +1369,7 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                                    LEXTYPE_OP_ASSIGN};
 
     saw_psect = saw_novalue = 0;
+    saw_weak = (dt == DCL_GLOBAL || dt == DCL_EXTERNAL) ? 0 : -1;
 
     if (attr->flags & SYM_M_BIND) {
         saw_psect = -1;
@@ -1367,6 +1388,14 @@ handle_routine_attrs (expr_ctx_t ctx, scopectx_t scope,
                 did1 = 1;
                 saw_novalue = 1;
                 attr->flags |= SYM_M_NOVALUE;
+            }
+        }
+        if (saw_weak <= 0) {
+            if (parser_expect(pctx, QL_NORMAL, LEXTYPE_ATTR_WEAK, 0, 1)) {
+                if (saw_weak < 0) expr_signal(ctx, STC__WEAKNOTGBL);
+                did1 = 1;
+                saw_weak = 1;
+                attr->flags |= SYM_M_WEAK;
             }
         }
         which = parser_expect_oneof(pctx, QL_NORMAL, delims, 3, 0, 1);

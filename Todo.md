@@ -3,14 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T4. WEAK attribute
-
-- Parse `WEAK` in attribute lists (`declarations.c`) for `GLOBAL LITERAL`,
-  `EXTERNAL LITERAL`, `GLOBAL` and `EXTERNAL` data and routines.
-- Back end: `LLVMSetLinkage(..., LLVMExternalWeakLinkage)` for externals and
-  `LLVMWeakAnyLinkage` for globals (`llvm_symgen.c`).
-- Test: an `EXTERNAL x : WEAK` that nothing defines has address 0.
-
 ## T5. %SWITCHES lexical function
 
 - `lib/frontend/switches.c` already knows the toggles; record their current

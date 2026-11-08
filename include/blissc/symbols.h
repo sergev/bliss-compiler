@@ -38,6 +38,7 @@ typedef enum {
 #define SYM_M_FORWARD   (1U<<7U)
 #define SYM_M_BIND      (1U<<8U)
 #define SYM_M_PLIT      (1U<<9U)
+#define SYM_M_WEAK      (1U<<10U)
 
 #define PSECT_M_ATTR_WRITE   (1U<<13U)
 #define PSECT_M_ATTR_EXEC    (1U<<14U)
