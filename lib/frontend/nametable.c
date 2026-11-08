@@ -129,6 +129,7 @@ struct scopectx_s {
     struct scopectx_s *parent;
     struct namectx_s  *home;
     struct name_s     *sclassnames[SCLASS_COUNT];
+    unsigned int       switches;    // on-off switch state, inherited
     namelist_t         names;
     hashtable_t       *htptr;
 };
@@ -618,6 +619,7 @@ scope_begin (namectx_t ctx, scopectx_t parent)
     scope->home = ctx;
     if (parent != 0) {
         memcpy(scope->sclassnames, parent->sclassnames, sizeof(scope->sclassnames));
+        scope->switches = parent->switches;
     }
     return scope;
 
@@ -683,6 +685,7 @@ scope_copy (scopectx_t src, scopectx_t newparent)
         dname->nameflags |= NAME_M_NODCLCHK;
     }
     memcpy(dst->sclassnames, src->sclassnames, sizeof(dst->sclassnames));
+    dst->switches = src->switches;
     return dst;
 
 } /* scope_copy */
@@ -696,6 +699,8 @@ void scope_setparent (scopectx_t scope, scopectx_t newparent) {
     if (scope != 0) scope->parent = newparent; }
 void scope_sclass_psectname_set (scopectx_t scope, storageclass_t cl, name_t *np) {
     scope->sclassnames[cl] = np; }
+unsigned int scope_switches (scopectx_t scope) { return scope->switches; }
+void scope_switches_set (scopectx_t scope, unsigned int sw) { scope->switches = sw; }
 namectx_t scope_namectx (scopectx_t scope) { return scope->home; }
 
 

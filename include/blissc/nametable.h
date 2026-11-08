@@ -139,6 +139,8 @@ scopectx_t scope_getparent(scopectx_t scope);
 namectx_t scope_namectx(scopectx_t scope);
 name_t *scope_sclass_psectname(scopectx_t scope, storageclass_t cl);
 void scope_sclass_psectname_set(scopectx_t scope, storageclass_t cl, name_t *np);
+unsigned int scope_switches(scopectx_t scope);
+void scope_switches_set(scopectx_t scope, unsigned int sw);
 void scope_setparent(scopectx_t scope, scopectx_t newparent);
 int scope_serialize(scopectx_t scope, void *fh, int allnames);
 int scope_deserialize(scopectx_t scope, void *fh, int allnames);

@@ -56,6 +56,7 @@ static strdesc_t linkage_kwd = STRDEF("LINKAGE");
 static strdesc_t structure_kwd = STRDEF("STRUCTURE");
 
 static lextype_t switch_types[] = {
+    LEXTYPE_KWD_CODE,
     LEXTYPE_NAME_SW_TOGGLE_ON,
     LEXTYPE_NAME_SW_TOGGLE_OFF,
     LEXTYPE_DCL_STRUCTURE,
@@ -215,16 +216,78 @@ ignore_switch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, lexeme_t *swlex)
 } /* ignore_switch */
 
 /*
- * ignore_toggle
+ * On-off switch state (LRM 19.2), for %SWITCHES. Kept per scope,
+ * so a SWITCHES declaration lasts to the end of its block; a set
+ * bit means the switch differs from its default.
+ */
+static strdesc_t onoff_names[SWITCH_K_COUNT] = {
+    STRDEF("ERRS"), STRDEF("OPTIMIZE"), STRDEF("SAFE"), STRDEF("UNAMES"),
+    STRDEF("ZIP"), STRDEF("CODE"), STRDEF("DEBUG")
+};
+#define SWITCH_M_DEFAULT_ON ((1U<<SWITCH_K_ERRS)|(1U<<SWITCH_K_OPTIMIZE)| \
+                             (1U<<SWITCH_K_SAFE)|(1U<<SWITCH_K_CODE))
+
+/*
+ * switch_record
  *
- * Handler for on-off switches that this compiler accepts but ignores.
+ * Records the setting of an on-off switch in the current scope.
+ */
+void
+switch_record (parse_ctx_t pctx, int idx, int on)
+{
+    scopectx_t scope = parser_scope_get(pctx);
+    unsigned int sw = scope_switches(scope);
+    unsigned int bit = 1U << idx;
+
+    if (on == ((SWITCH_M_DEFAULT_ON & bit) != 0)) {
+        sw &= ~bit;
+    } else {
+        sw |= bit;
+    }
+    scope_switches_set(scope, sw);
+
+} /* switch_record */
+
+/*
+ * switch_test
+ *
+ * Returns 1 if the named setting (e.g. OPTIMIZE or NOZIP) is
+ * current, 0 if not, -1 for an unknown switch.
+ */
+int
+switch_test (scopectx_t scope, strdesc_t *name)
+{
+    unsigned int i, on;
+    strdesc_t base = *name;
+    int want = 1;
+
+    if (base.len > 2 && base.ptr[0] == 'N' && base.ptr[1] == 'O') {
+        base.ptr += 2;
+        base.len -= 2;
+        want = 0;
+    }
+    for (i = 0; i < SWITCH_K_COUNT; i++) {
+        if (strings_eql(&base, &onoff_names[i])) {
+            on = ((SWITCH_M_DEFAULT_ON ^ scope_switches(scope)) >> i) & 1;
+            return (int) on == want;
+        }
+    }
+    return -1;
+
+} /* switch_test */
+
+/*
+ * record_toggle
+ *
+ * Handler for on-off switches that only need their state recorded.
  */
 static int
-ignore_toggle (parse_ctx_t pctx, void *ctx, int togidx, lextype_t dcltype, name_t *togname)
+record_toggle (parse_ctx_t pctx, void *ctx, int togidx, lextype_t dcltype, name_t *togname)
 {
+    switch_record(pctx, togidx, name_type(togname) == LEXTYPE_NAME_SW_TOGGLE_ON);
     return 1;
 
-} /* ignore_toggle */
+} /* record_toggle */
 
 /*
  * switches_ignored_declare
@@ -234,15 +297,19 @@ ignore_toggle (parse_ctx_t pctx, void *ctx, int togidx, lextype_t dcltype, name_
 void
 switches_ignored_declare (scopectx_t scope)
 {
-    static strdesc_t toggles[] = {
-        STRDEF("OPTIMIZE"), STRDEF("SAFE"), STRDEF("UNAMES"), STRDEF("ZIP")
+    static int toggles[] = {
+        SWITCH_K_OPTIMIZE, SWITCH_K_SAFE, SWITCH_K_UNAMES, SWITCH_K_ZIP, SWITCH_K_DEBUG
     };
     name_t *onp, *offp;
     unsigned int i;
 
     for (i = 0; i < sizeof(toggles)/sizeof(toggles[0]); i++) {
-        switch_toggle_declare(scope, &toggles[i], ignore_toggle, 0, 0, &onp, &offp);
+        switch_toggle_declare(scope, &onoff_names[toggles[i]], record_toggle, 0,
+                              toggles[i], &onp, &offp);
     }
+    // CODE is also a keyword (PSECT CODE): declare only NOCODE here
+    switch_toggle_declare(scope, &onoff_names[SWITCH_K_CODE], record_toggle, 0,
+                          SWITCH_K_CODE, 0, &offp);
     switch_special_declare(scope, LEXTYPE_SWITCH_ADDRMODE, ignore_switch, 0);
     switch_special_declare(scope, LEXTYPE_SWITCH_LANGUAGE, ignore_switch, 0);
     switch_special_declare(scope, LEXTYPE_SWITCH_ENV, ignore_switch, 0);
@@ -271,7 +338,9 @@ parse_switches (parse_ctx_t pctx, lextype_t decltype, lextype_t terminator)
             break;
         }
         np = lexeme_ctx_get(lex);
-        if (np == 0) {
+        if (lexeme_type(lex) == LEXTYPE_KWD_CODE) {
+            switch_record(pctx, SWITCH_K_CODE, 1);
+        } else if (np == 0) {
             log_signal(parser_logctx(pctx), parser_curpos(pctx), STC__SWITCHUNS,
                        lexeme_text(lex));
         } else {

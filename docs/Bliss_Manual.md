@@ -817,7 +817,7 @@ before parsing. They work on token sequences and constants.
 | `%LTCE (e)` | 1 if e is a link-time constant |
 | `%DECLARED (name)` | 1 if name is declared |
 | `%BLISS (BLISS32)` | 1 if compiling with that dialect (**blissc**: `%BLISS (BLISSM)`) |
-| `%SWITCHES (...)` | 1 if the given switches are on (not in blissc) |
+| `%SWITCHES (s, ...)` | 1 if each on-off switch has the given setting, e.g. `%SWITCHES (NOOPTIMIZE, ZIP)` |
 | `%VARIANT` | value of the `--variant` command-line option |
 
 ### Numbers
@@ -1052,8 +1052,10 @@ LABEL loop1;                    ! declare a label for LEAVE
 UNDECLARE tmp;                  ! forget a name (e.g. a macro from a library)
 ```
 
-**blissc:** the on-off switches `OPTIMIZE`, `SAFE`, `UNAMES` and `ZIP` are
-accepted and ignored; `ERRS` and the listing switches work. The x86
+**blissc:** the on-off switches `OPTIMIZE`, `SAFE`, `UNAMES`, `ZIP`, `CODE`
+and `DEBUG` are accepted and recorded for `%SWITCHES`, but do not change
+the generated code; `ERRS` and the listing switches work. A `SWITCHES`
+declaration lasts to the end of its block. The x86
 builtins are `MOVSB (n, src, dst)` and `STOSB (ch, n, dst)`, which return
 the destination pointer advanced past what they wrote, plus `CMPSB`,
 `SCASB_REPE`, `SCASB_REPNE` and `SCASB_CMP`, used by the `CH$` functions.

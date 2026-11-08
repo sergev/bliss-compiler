@@ -115,10 +115,16 @@ BEGIN
         [11] : test_output(.caseno, 'require=%ld,%ld', req_value, req_twice (4));
 !! 11 require=17,8
         [12] : BEGIN
-            SWITCHES NOSAFE, ZIP;           ! accepted, no effect in blissc
-            test_output(.caseno, 'switches=%ld', 1);
+            ! %SWITCHES (LRM 15.5.11): SWITCHES last to the end of the block
+            LOCAL a;
+            BEGIN
+                SWITCHES NOSAFE, ZIP;       ! no effect on the code in blissc
+                a = %SWITCHES (NOSAFE, ZIP, NOOPTIMIZE);
+            END;
+            test_output(.caseno, 'switches=%ld,%ld,%ld,%ld', .a, %SWITCHES (SAFE, NOZIP),
+                        %SWITCHES (OPTIMIZE), %SWITCHES (CODE, NODEBUG, ERRS, NOUNAMES));
         END;
-!! 12 switches=1
+!! 12 switches=1,1,0,1
         [13] : test_output(.caseno, 'quotename=%ld', %QUOTENAME ('REQ_', 'VALUE'));
 !! 13 quotename=17
         [14] : test_output(.caseno, 'chsize=%ld', CH$SIZE (CH$PTR (buf)));

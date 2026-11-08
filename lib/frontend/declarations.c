@@ -103,6 +103,7 @@ static int
 toggle_errs (parse_ctx_t pctx, void *ctx, int togidx, lextype_t dcltype, name_t *togname)
 {
     log_logterm_set(parser_logctx(pctx), name_type(togname) != LEXTYPE_NAME_SW_TOGGLE_OFF);
+    switch_record(pctx, SWITCH_K_ERRS, name_type(togname) != LEXTYPE_NAME_SW_TOGGLE_OFF);
     return 1;
 
 } /* toggle_errs */
@@ -1317,6 +1318,7 @@ parse_formals (expr_ctx_t ctx, scopectx_t curscope,
         if (parse_decl_name(pctx, &namestr, &pos)) {
             if (*argtable == 0) {
                 *argtable = scope_begin(expr_namectx(ctx), 0);
+                scope_switches_set(*argtable, scope_switches(curscope));
             }
             np = datasym_declare(*argtable, namestr, &attr, pos);
             string_free(expr_strctx(ctx), namestr);

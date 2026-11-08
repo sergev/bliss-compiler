@@ -3,14 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T5. %SWITCHES lexical function
-
-- `lib/frontend/switches.c` already knows the toggles; record their current
-  on/off state per scope and return 1/0 from `%SWITCHES (name, ...)`.
-- Register it with the other lexical functions (`lexeme.c`/`charfuncs.c`).
-- The ignored toggles (OPTIMIZE, SAFE, UNAMES, ZIP) still keep state.
-- Test: `%IF %SWITCHES (ZIP) %THEN ...` with SWITCHES ZIP and NOZIP.
-
 ## T6. LINKAGE declarations
 
 Currently SYNTAXERR. Implement only what maps onto LLVM calling conventions.

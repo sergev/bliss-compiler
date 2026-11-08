@@ -71,7 +71,7 @@ struct parse_ctx_s {
     DODEF(UNQUOTE, parse_unquote_expand) \
     DODEF(EXPAND, parse_unquote_expand) \
     DODEF(ELSE, parse_ELSE) DODEF(FI, parse_FI) \
-    DODEF(DECLARED, parse_DECLARED) \
+    DODEF(DECLARED, parse_DECLARED) DODEF(SWITCHES, parse_SWITCHES) \
     DODEF(PRINT, parse_msgfunc) \
     DODEF(INFORM, parse_msgfunc) DODEF(ERROR, parse_msgfunc) \
     DODEF(WARN, parse_msgfunc) DODEF(MESSAGE, parse_msgfunc) \
@@ -1818,6 +1818,47 @@ parse_DECLARED (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t curlt)
     return 1;
 
 } /* parse_DECLARED */
+
+/*
+ * %SWITCHES(#switch-name,...)
+ *
+ * Returns 1 if every parameter names the current setting
+ * of an on-off switch, 0 otherwise.
+ */
+static int
+parse_SWITCHES (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t curlt)
+{
+    lexeme_t *lex;
+    int result = 1;
+
+    if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 0)) {
+        log_signal(pctx->logctx, pctx->curpos, STC__DELIMEXP, "(");
+        return 1;
+    }
+    while (1) {
+        int t;
+        parser_next(pctx, QL_NAME, &lex);
+        t = switch_test(pctx->curscope, lexeme_text(lex));
+        if (t < 0) {
+            log_signal(pctx->logctx, pctx->curpos, STC__SWITCHUNS, lexeme_text(lex));
+            t = 0;
+        }
+        result = result && t;
+        lexeme_free(pctx->lmemctx, lex);
+        if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
+            break;
+        }
+        if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_COMMA, 0, 1)) {
+            log_signal(pctx->logctx, pctx->curpos, STC__DELIMEXP, ",");
+            parser_skip_to_delim(pctx, LEXTYPE_DELIM_RPAR);
+            break;
+        }
+    }
+    lexer_insert(pctx->lexctx, lexeme_create(pctx->lmemctx, LEXTYPE_NUMERIC,
+                                             result ? &one : &zero));
+    return 1;
+
+} /* parse_SWITCHES */
 
 /*
  * parse_msgfunc
