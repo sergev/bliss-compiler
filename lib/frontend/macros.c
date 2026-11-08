@@ -1076,6 +1076,17 @@ macro_expand (macroctx_t mctx, name_t *macroname, lexseq_t *result)
         expr_signal(ctx, STC__INTCMPERR, "macro_expand");
         return 1;
     }
+    {
+        // Stop runaway recursion before it exhausts memory
+        expansion_t *e;
+        unsigned int depth = 0;
+        for (e = mctx->curexp; e != 0; e = e->next) depth += 1;
+        if (depth >= 1000) {
+            free(curexp);
+            expr_signal(ctx, STC__MACDEPTH);
+            return 1;
+        }
+    }
     memset(curexp, 0, sizeof(struct expansion_s));
 
     // We save the punctuation class here, since it will get
