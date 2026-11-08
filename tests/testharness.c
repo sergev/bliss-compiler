@@ -21,6 +21,13 @@ __asm__(".globl TEST_EXTLIT\n.set TEST_EXTLIT, 1234");
 extern char TEST_GLOBLIT[] __attribute__((weak));   /* defined by misc.bli */
 long TEST_GLOBLIT_VALUE (void) { return (long) TEST_GLOBLIT; }
 
+/* %ASCID: a C view of the string descriptor */
+struct dsc { unsigned short len; unsigned char dtype, dclass; const char *ptr; };
+long TEST_DSC_CHECK (struct dsc *d)
+{
+    return (d->dtype == 14 && d->dclass == 1 && d->ptr[0] == 'f') ? d->len : -1;
+}
+
 /* WEAK: strong definitions override misc.bli's weak GLOBALs */
 long TEST_WKDATA = 7;
 long TEST_WKRTN (void) { return 2; }

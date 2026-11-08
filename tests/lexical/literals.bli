@@ -16,13 +16,18 @@ BIND
     h = UPLIT('untyped string literal', %CHAR(0)),
     i = UPLIT(%ASCII'%ASCII string literal', %CHAR(0)),
     j = UPLIT(%ASCIC'counted string literal') : VECTOR [,BYTE],
-    k = UPLIT(%ASCIZ'null-terminated string literal');
+    k = UPLIT(%ASCIZ'null-terminated string literal'),
+    ! %ASCID: the address of a descriptor (LRM 4.3.4)
+    l = %ASCID'described string' : BLOCK [2];
+
+EXTERNAL ROUTINE
+    test_dsc_check;
     
-test_setup(numcases=11);
+test_setup(numcases=13);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 11 OF
+    CASE .caseno FROM 1 TO 13 OF
     SET
         [1] : test_output(.caseno, 'a = [%d,0x%x]', a, a);
 !! 1 a = [65535,0xffff]
@@ -47,6 +52,12 @@ BEGIN
 !!10 j = "counted string literal" (length=22)
        [11] : test_output(.caseno, 'k = "%s"', k);
 !!11 k = "null-terminated string literal"
+       [12] : test_output(.caseno, 'l = "%.*s" (length=%d,type=%d,class=%d)',
+                          .l[0, 0, 16, 0], .l[1, 0, %BPVAL, 0],
+                          .l[0, 0, 16, 0], .l[0, 16, 8, 0], .l[0, 24, 8, 0]);
+!!12 l = "described string" (length=16,type=14,class=1)
+       [13] : test_output(.caseno, 'ascid from C = %ld', test_dsc_check (%ASCID 'from C'));
+!!13 ascid from C = 6
     TES;
 END;
 

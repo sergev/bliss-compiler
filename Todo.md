@@ -3,14 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T10. %ASCID string descriptors
-
-- Emit a static descriptor (length word, type, class, pointer) followed by
-  the string, as a PLIT-like constant (`lexeme.c`/`execfuncs.c` for the
-  lexical part, `llvm_symgen.c` for data).
-- Choose the descriptor layout for 64-bit (length 16 bits, pointer 64).
-- Test: fetch length and characters through the descriptor.
-
 ## T11. Floating point
 
 Largest front-end change; lowest priority.

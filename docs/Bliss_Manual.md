@@ -202,11 +202,25 @@ String forms, mostly used inside PLITs:
 | `'abc'` or `%ASCII 'abc'` | the characters |
 | `%ASCIZ 'abc'` | characters + a 0 byte (C string) |
 | `%ASCIC 'abc'` | a count byte, then characters |
-| `%ASCID 'abc'` | VMS string descriptor (not in blissc) |
+| `%ASCID 'abc'` | its value is the address of a string descriptor (see below) |
 | `%RAD50_11`, `%SIXBIT` | old packed encodings (not in blissc) |
 
 A short string used as a value is a number: `'AB'` as an expression is the
 word holding those bytes.
+
+`%ASCID` makes a VMS-style **string descriptor** in a PLIT and gives its
+address. Word 0 holds the length (bits 0-15), the type 14 = text (bits
+16-23) and the class 1 = static (bits 24-31); word 1 is the address of the
+characters:
+
+```bliss
+BIND msg = %ASCID 'Hello' : BLOCK [2];
+.msg[0, 0, 16, 0]                       ! 5, the length
+CH$PTR (.msg[1, 0, %BPVAL, 0])          ! the characters
+```
+
+**blissc:** on x86-64 this is the C structure
+`struct { unsigned short len; unsigned char type, class; char *ptr; }`.
 
 ## 6. Operators
 

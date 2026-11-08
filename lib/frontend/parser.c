@@ -56,7 +56,7 @@ struct parse_ctx_s {
 #define DODEFS \
     DODEF(ASCII, parse_string_literal) \
     DODEF(ASCIC, parse_string_literal) \
-    DODEF(ASCIZ, parse_string_literal) \
+    DODEF(ASCIZ, parse_string_literal) DODEF(ASCID, parse_ASCID) \
     DODEF(B, parse_numeric_literal) \
     DODEF(O, parse_numeric_literal) \
     DODEF(DECIMAL, parse_numeric_literal) \
@@ -1283,6 +1283,48 @@ parse_string_literal (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t cu
     return 1;
 
 } /* parse_string_literal */
+
+/*
+ * parse_ASCID
+ *
+ * %ASCID 'string' (LRM 4.3.4): the address of a string descriptor,
+ * expanded as UPLIT (header, UPLIT ('string')). The header is the
+ * BLISS-32 descriptor longword: length, type 14 (text), class 1
+ * (static); then the address of the characters.
+ */
+static int
+parse_ASCID (parse_ctx_t pctx, void *ctx, quotelevel_t ql, lextype_t curlt)
+{
+    lexeme_t *lex;
+    lextype_t lt = parser_next(pctx, ql, &lex);
+    strdesc_t *str = lexeme_text(lex), *num;
+    lexseq_t seq;
+    static strdesc_t uplit = STRDEF("UPLIT"), lpar = STRDEF("("),
+        rpar = STRDEF(")"), comma = STRDEF(",");
+
+    if (lt != LEXTYPE_STRING || str->len > 65535) {
+        log_signal(pctx->logctx, pctx->curpos, STC__INVSTRLIT);
+        lexeme_free(pctx->lmemctx, lex);
+        return 1;
+    }
+    num = string_printf(pctx->strctx, 0, "%lu",
+                        (unsigned long) str->len | (14UL << 16) | (1UL << 24));
+    lexseq_init(&seq);
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_NAME, &uplit));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_DELIM_LPAR, &lpar));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_NUMERIC, num));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_DELIM_COMMA, &comma));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_NAME, &uplit));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_DELIM_LPAR, &lpar));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_STRING, str));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_DELIM_RPAR, &rpar));
+    lexseq_instail(&seq, parser_lexeme_create(pctx, LEXTYPE_DELIM_RPAR, &rpar));
+    lexer_insert_seq(pctx->lexctx, &seq);
+    string_free(pctx->strctx, num);
+    lexeme_free(pctx->lmemctx, lex);
+    return 1;
+
+} /* parse_ASCID */
 
 /*
  * parse_numeric_literal
