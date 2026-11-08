@@ -386,14 +386,8 @@ llvmgen_presetter (gencodectx_t gctx, initval_t *ivlist, unsigned int padding)
                 unsigned int bpval = machine_scalar_bits(gctx->mach);
                 LLVMTypeRef inttype = LLVMIntTypeInContext(gctx->llvmctx, bpval);
                 LLVMTypeRef unittype = LLVMIntTypeInContext(gctx->llvmctx, bpunit);
-                LLVMTypeRef vtype = LLVMGetElementType(LLVMTypeOf(v));
                 o = LLVMConstInt(inttype, (unsigned long long int) offset, 1);
-                if (LLVMGetTypeKind(vtype) != LLVMArrayTypeKind ||
-                    LLVMGetElementType(vtype) != unittype) {
-                    vtype = LLVMPointerType(LLVMArrayType(unittype, (unsigned int)(offset+1)), 0);
-                    v = LLVMConstPointerCast(v, vtype);
-                }
-                this->val = LLVMConstGEP(v, &o, 1);
+                this->val = LLVMConstGEP2(unittype, v, &o, 1);
             }
         } else {
             expr_signal(gctx->ectx, STC__PRBADVALUE);
@@ -774,12 +768,7 @@ rtnsym_generator (void *vctx, name_t *np, void *p)
     }
     lr->func = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
     if (extantfn != 0) {
-        LLVMTypeRef extype = LLVMTypeOf(extantfn);
-        if (lr->type == extype) {
-            LLVMReplaceAllUsesWith(extantfn, lr->func);
-        } else {
-            LLVMReplaceAllUsesWith(extantfn, LLVMConstBitCast(lr->func, extype));
-        }
+        LLVMReplaceAllUsesWith(extantfn, lr->func);
         LLVMDeleteFunction(extantfn);
     }
     if (name_globalname(expr_namectx(gctx->ectx), np) != 0) {
@@ -868,7 +857,7 @@ llvmgen_segaddress (gencodectx_t gctx, name_t *np, llvm_stgclass_t *segclassp, u
         if (ld->deref != 0 && (ld->flags & LLVMGEN_M_SEG_ISREF) != 0) {
             if (flagsp != 0) *flagsp |= LLVMGEN_M_SEG_DEREFED;
             if (ld->vclass != LLVM_REG) {
-                val = LLVMBuildLoad(gctx->curfn->builder, val, llvmgen_temp(gctx));
+                val = LLVMBuildLoad2(gctx->curfn->builder, LLVMPointerTypeInContext(gctx->llvmctx, 0), val, llvmgen_temp(gctx));
             }
         }
         return val;

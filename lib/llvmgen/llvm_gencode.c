@@ -167,7 +167,6 @@ gencode_routine_end (gencodectx_t gctx, name_t *np)
     gctx->freerts = rt;
 
     LLVMVerifyFunction(thisfn, LLVMPrintMessageAction);
-    LLVMRunFunctionPassManager(gctx->passmgr, thisfn);
 
     return 1;
 
@@ -210,8 +209,7 @@ llvmgen_cast_trunc_ext (gencodectx_t gctx, LLVMValueRef val, LLVMTypeRef neededt
             return LLVMBuildPointerCast(builder, val, neededtype, llvmgen_temp(gctx));
         }
         if (constcast) {
-            return llvmgen_adjustval(gctx, LLVMConstPtrToInt(val, gctx->intptrtszype),
-                                     neededtype, signext);
+            return LLVMConstPtrToInt(val, neededtype);
         }
         tmp = LLVMBuildPtrToInt(builder, val, gctx->intptrtszype, llvmgen_temp(gctx));
         return llvmgen_adjustval(gctx, tmp, neededtype, signext);
@@ -226,9 +224,13 @@ llvmgen_cast_trunc_ext (gencodectx_t gctx, LLVMValueRef val, LLVMTypeRef neededt
             }
             return LLVMBuildTrunc(builder, val, neededtype, llvmgen_temp(gctx));
         } else if (needbits > valbits) {
+            if (constcast && LLVMIsAConstantInt(val)) {
+                return (signext ? LLVMConstInt(neededtype, (unsigned long long) LLVMConstIntGetSExtValue(val), 1)
+                        : LLVMConstInt(neededtype, LLVMConstIntGetZExtValue(val), 0));
+            }
             if (constcast) {
-                return (signext ? LLVMConstSExt(val, neededtype)
-                        : LLVMConstZExt(val, neededtype));
+                expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_cast_trunc_ext");
+                return 0;
             }
             if (signext) {
                 return LLVMBuildSExt(builder, val, neededtype, llvmgen_temp(gctx));
@@ -312,12 +314,6 @@ gencode_module_begin (gencodectx_t gctx, name_t *modnp)
     if (gctx->module == 0) {
         return 0;
     }
-    gctx->passmgr = LLVMCreateFunctionPassManagerForModule(gctx->module);
-    if (gctx->passmgr == 0) {
-        LLVMDisposeModule(gctx->module);
-        gctx->module = 0;
-        return 0;
-    }
 
     triple = LLVMGetTargetMachineTriple(gctx->mctx->target_machine);
     LLVMSetTarget(gctx->module, triple);
@@ -325,14 +321,6 @@ gencode_module_begin (gencodectx_t gctx, name_t *modnp)
     dl = LLVMCreateTargetDataLayout(gctx->mctx->target_machine);
     LLVMSetModuleDataLayout(gctx->module, dl);
     LLVMDisposeTargetData(dl);
-
-    LLVMAddBasicAliasAnalysisPass(gctx->passmgr);
-    if (gctx->optlevel > 0) {
-        LLVMAddAggressiveInstCombinerPass(gctx->passmgr);
-        LLVMAddReassociatePass(gctx->passmgr);
-        LLVMAddGVNPass(gctx->passmgr);
-        LLVMAddCFGSimplificationPass(gctx->passmgr);
-    }
 
 #if 0 // XXX later
     headerlen = 0;
@@ -374,6 +362,18 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
     char *err;
 
     LLVMVerifyModule(gctx->module, LLVMPrintMessageAction, 0);
+    if (gctx->optlevel > 0) {
+        LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
+        LLVMErrorRef perr = LLVMRunPasses(gctx->module,
+            "function(aggressive-instcombine,instcombine,reassociate,gvn,simplifycfg)",
+            gctx->mctx->target_machine, opts);
+        if (perr != 0) {
+            char *msg = LLVMGetErrorMessage(perr);
+            fprintf(stderr, "%s\n", msg);
+            LLVMDisposeErrorMessage(msg);
+        }
+        LLVMDisposePassBuilderOptions(opts);
+    }
     if (gctx->mctx->irdumpfile != 0) {
         err = 0;
         if (LLVMPrintModuleToFile(gctx->module, gctx->mctx->irdumpfile, &err)) {
@@ -385,7 +385,6 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
                                     gctx->mctx->outfile, gctx->mctx->outputtype, &err)) {
         if (err) { fprintf(stderr, "%s\n", err); LLVMDisposeMessage(err); }
     }
-    LLVMDisposePassManager(gctx->passmgr);
     LLVMDisposeModule(gctx->module);
 
     return 1;
@@ -446,8 +445,8 @@ gencode_init (void *ectx, logctx_t logctx, machinedef_t *mach, symctx_t symctx)
     gctx->llvmctx = gctx->mctx->llvmctx;
     gctx->int1type = LLVMIntTypeInContext(gctx->llvmctx, 1);
     gctx->fullwordtype = LLVMIntTypeInContext(gctx->llvmctx, machine_scalar_bits(mach));
-    gctx->unitptrtype = LLVMPointerType(LLVMIntTypeInContext(gctx->llvmctx,
-                                                             machine_unit_bits(mach)), 0);
+    gctx->unittype = LLVMIntTypeInContext(gctx->llvmctx, machine_unit_bits(mach));
+    gctx->unitptrtype = LLVMPointerTypeInContext(gctx->llvmctx, 0);
     gctx->intptrtszype = LLVMIntTypeInContext(gctx->llvmctx, machine_addr_bits(mach));
     gctx->optlevel = 1;
 

@@ -21,12 +21,12 @@ of machine-specific support.
 ## Prerequisites
 
 * Recent-vintage C compiler
-* Recent version LLVM
-* CMake 3.13 or later, or a recent version of autotools
+* LLVM 17 or later
+* CMake 3.13 or later
+* Python 3 (for running the tests)
 
-Recent development and testing has been on Ubuntu 20.04 with
-gcc 9 and LLVM 9.0.1 (prebuilt llvm-9-dev package) and LLVM
-10.0.1 (built from sources).
+Recent development and testing has been on Debian with
+gcc 16 and LLVM 21.
 
 ## Building the compiler
 

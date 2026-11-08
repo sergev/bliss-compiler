@@ -131,9 +131,9 @@ llvmgen_addr_expression (gencodectx_t gctx, expr_node_t *exp,
             LLVMValueRef offval = LLVMConstInt(gctx->fullwordtype, (unsigned long long int) off, 1);
             addr = llvmgen_adjustval(gctx, addr, gctx->unitptrtype, 0);
             if (LLVMIsConstant(addr)) {
-                addr = LLVMConstGEP(addr, &offval, 1);
+                addr = LLVMConstGEP2(gctx->unittype, addr, &offval, 1);
             } else {
-                addr = LLVMBuildGEP(gctx->curfn->builder, addr, &offval, 1, llvmgen_temp(gctx));
+                addr = LLVMBuildGEP2(gctx->curfn->builder, gctx->unittype, addr, &offval, 1, llvmgen_temp(gctx));
             }
         }
     } else {
@@ -297,13 +297,13 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
     if (expr_type(rtnexp) == EXPTYPE_PRIM_SEG &&
         name_type(expr_seg_name(rtnexp)) == LEXTYPE_NAME_ROUTINE) {
         rtnadr = LLVMGetNamedFunction(gctx->module, name_azstring(expr_seg_name(rtnexp)));
-        type = LLVMGetElementType(LLVMTypeOf(rtnadr));
+        type = LLVMGlobalGetValueType(rtnadr);
         rettype = LLVMGetReturnType(type);
         formalcount = LLVMCountParamTypes(type);
     } else {
         rettype = gctx->fullwordtype;
-        type = LLVMPointerType(LLVMFunctionType(rettype, 0, 0, 1), 0);
-        rtnadr = llvmgen_expression(gctx, rtnexp, type);
+        type = LLVMFunctionType(rettype, 0, 0, 1);
+        rtnadr = llvmgen_expression(gctx, rtnexp, LLVMPointerTypeInContext(gctx->llvmctx, 0));
         formalcount = 0;
     }
     if (argcount > LLVMGEN_K_MAXARGS) {
@@ -323,13 +323,13 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
 
     if (LLVMGetTypeKind(rettype) == LLVMVoidTypeKind) {
         result = 0;
-        LLVMBuildCall(gctx->curfn->builder, rtnadr, argvals, argcount, "");
+        LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount, "");
         if (neededtype != 0) {
             log_signal(expr_logctx(gctx->ectx), expr_textpos(rtnexp), STC__EXPRVALRQ);
             result = LLVMConstNull(neededtype);
         }
     } else {
-        result = LLVMBuildCall(gctx->curfn->builder, rtnadr, argvals, argcount, llvmgen_temp(gctx));
+        result = LLVMBuildCall2(gctx->curfn->builder, type, rtnadr, argvals, argcount, llvmgen_temp(gctx));
     }
 
     return (result == 0 ? 0 : llvmgen_adjustval(gctx, result, neededtype, 0));
@@ -361,7 +361,8 @@ llvmgen_expgen_init (gencodectx_t gctx)
     unsigned int bpunit = machine_unit_bits(gctx->mach);
     unsigned int bpval = machine_scalar_bits(gctx->mach);
 
-    gctx->unitptrtype = LLVMPointerType(LLVMIntTypeInContext(gctx->llvmctx, bpunit), 0);
+    gctx->unittype = LLVMIntTypeInContext(gctx->llvmctx, bpunit);
+    gctx->unitptrtype = LLVMPointerTypeInContext(gctx->llvmctx, 0);
     gctx->fullwordtype = LLVMIntTypeInContext(gctx->llvmctx, bpval);
 
     llvmgen_expgen_register(gctx, EXPTYPE_PRIM_LIT, gen_literal);

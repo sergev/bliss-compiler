@@ -398,7 +398,7 @@ lexer___next (lexer_ctx_t ctx, int erroneof, int peek, textpos_t *posp)
     lextype_t lextype;
     strdesc_t *tok;
     unsigned int column;
-    char *cp;
+    const char *cp;
 
     if (ctx == 0) {
         return &errlex;

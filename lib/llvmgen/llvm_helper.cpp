@@ -29,8 +29,8 @@
 #include "llvm_helper.h"
 #include "llvm/IR/Instructions.h"
 
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/Support/Host.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/TargetParser/Host.h"
 
 using namespace llvm;
 
