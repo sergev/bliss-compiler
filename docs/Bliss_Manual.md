@@ -753,8 +753,32 @@ y = apply (double, 21);                 ! 42
 
 ### Variable argument lists
 
-`ACTUALCOUNT ()` returns the number of arguments passed and
-`ACTUALPARAMETER (i)` the i-th one. **blissc:** not supported.
+(LRM 13.6) A routine can take any number of arguments. Declare the
+linkage functions `BUILTIN` inside it: `ACTUALCOUNT ()` is the number of
+arguments passed, `ACTUALPARAMETER (i)` the i-th one (1-based; formals
+count too), and `ARGPTR ()` the address of the argument block: a vector
+holding the count, then each argument.
+
+```bliss
+ROUTINE average =
+    BEGIN
+    BUILTIN ACTUALCOUNT, ACTUALPARAMETER;
+    LOCAL sum;
+    sum = 0;
+    INCR i FROM 1 TO ACTUALCOUNT () DO
+        sum = .sum + ACTUALPARAMETER (.i);
+    .sum / ACTUALCOUNT ()
+    END;
+
+average (2, 4, 6, 8, 10)                ! 6
+```
+
+**blissc:** the caller stores the argument count in the thread-local
+variable `bliss_argcount` just before the call; a routine that uses
+`ACTUALCOUNT` reads it on entry. C code calling such a routine must set
+it first (`extern __thread long bliss_argcount;`). A routine that uses
+`ACTUALPARAMETER` or `ARGPTR` becomes a C varargs function. At most 64
+arguments.
 
 ## 15. Lexical functions and conditional compilation
 
@@ -1058,8 +1082,8 @@ routine address as its first argument: `BLISS (.l, 0)` calls the routine
 whose address is in `l` (LRM 12.2, UM 5.2.5). With the default linkage,
 `(.l) (0)` does the same.
 
-**blissc:** user `LINKAGE` declarations, general routine calls, `ENABLE`,
-`SIGNAL` and `ACTUALCOUNT` are not implemented. Routines use the platform C calling
+**blissc:** user `LINKAGE` declarations, general routine calls, `ENABLE`
+and `SIGNAL` are not implemented. Routines use the platform C calling
 convention, so BLISS and C code can call each other directly.
 
 ## 22. Pitfalls for C programmers

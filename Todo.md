@@ -3,23 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T3. ACTUALCOUNT and ACTUALPARAMETER
-
-Both report UNDCLNAME.
-
-- Design decision first: the SysV x86-64 ABI does not pass an argument
-  count. Proposal: a routine that uses ACTUALCOUNT is a variadic LLVM
-  function with a hidden count as its first argument; calls from BLISS
-  pass the count, and C callers must pass it too. Write the decision into
-  the manual.
-- Front end: declare them as executable functions (`execfuncs.c`); mark the
-  enclosing routine as needing the count.
-- Back end: `llvm_execfuncgen.c`; ACTUALPARAMETER(i) uses `va_arg`, or
-  indexes the declared parameters when `i` is constant and in range.
-- Calls: `expression.c` ~line 1085, also start checking the argument count
-  against the declaration (warning).
-- Test: a routine called with 0, 1 and 3 arguments.
-
 ## T4. WEAK attribute
 
 - Parse `WEAK` in attribute lists (`declarations.c`) for `GLOBAL LITERAL`,

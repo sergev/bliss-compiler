@@ -53,6 +53,9 @@ parse_func_args (expr_ctx_t ctx, exprseq_t *arglist)
     if (!parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
         return 0;
     }
+    if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RPAR, 0, 1)) {
+        return 1;   // no arguments
+    }
     while (1) {
         expr_node_t *exp;
         if (!expr_parse_expr(ctx, &exp)) {

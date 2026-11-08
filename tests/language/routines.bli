@@ -2,7 +2,8 @@ MODULE test =
 BEGIN
 
 ! Routines: parameters, recursion, NOVALUE, RETURN, REF arguments,
-! routine addresses, nested routines, FORWARD, BIND ROUTINE.
+! routine addresses, nested routines, FORWARD, BIND ROUTINE,
+! ACTUALCOUNT, ACTUALPARAMETER, ARGPTR (LRM 13.6).
 
 LIBRARY 'testharness.lib';
 
@@ -103,11 +104,55 @@ END;
 
 BIND ROUTINE twice = dbl;
 
-test_setup(numcases=17);
+! LRM 13.6.1.2
+ROUTINE average =
+    BEGIN
+    BUILTIN ACTUALCOUNT, ACTUALPARAMETER;
+    LOCAL l;
+    l = 0;
+    INCR i FROM 1 TO ACTUALCOUNT () DO
+        l = .l + ACTUALPARAMETER (.i);
+    .l / ACTUALCOUNT ()
+    END;
+
+ROUTINE delta_average (expected) =
+    BEGIN
+    BUILTIN ACTUALCOUNT, ACTUALPARAMETER;
+    LOCAL l;
+    l = 0;
+    INCR i FROM 2 TO ACTUALCOUNT () DO
+        l = .l + ACTUALPARAMETER (.i);
+    .expected - .l / (ACTUALCOUNT () - 1)
+    END;
+
+! The argument block: count, then the arguments
+ROUTINE argblock (a, b) =
+    BEGIN
+    BUILTIN ACTUALCOUNT, ARGPTR;
+    LOCAL p : REF VECTOR;
+    p = ARGPTR ();
+    .p[0] * 1000 + .p[1] * 100 + .p[ACTUALCOUNT ()] * 10 + .b
+    END;
+
+! Called from C (TEST_CALL_AVERAGE), which sets bliss_argcount
+GLOBAL ROUTINE test_average =
+    BEGIN
+    BUILTIN ACTUALCOUNT, ACTUALPARAMETER;
+    LOCAL l;
+    l = 0;
+    INCR i FROM 1 TO ACTUALCOUNT () DO
+        l = .l + ACTUALPARAMETER (.i);
+    .l
+    END;
+
+EXTERNAL ROUTINE
+    test_call_average;
+
+test_setup(numcases=19);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
-    CASE .caseno FROM 1 TO 17 OF
+    CASE .caseno FROM 1 TO 19 OF
     SET
         [1] : test_output(.caseno, 'fact=%ld,%ld', fact(1), fact(12));
 !! 1 fact=1,479001600
@@ -168,6 +213,12 @@ BEGIN
             test_output(.caseno, 'rtntable=%ld,%ld', (.rtns[0])(5), (.rtns[1])(5));
         END;
 !! 17 rtntable=6,10
+        [18] : test_output(.caseno, 'actual=%ld,%ld,%ld,%ld,%ld,%ld', average (1, 2, 3),
+                           average (2, 4, 6, 8, 10), average (8), delta_average (3, 1, 2, 3),
+                           delta_average (6, 2, 4, 6, 8, 10), argblock (7, 8, 9));
+!! 18 actual=2,6,8,1,0,3798
+        [19] : test_output(.caseno, 'fromc=%ld', test_call_average ());
+!! 19 fromc=60
     TES;
 END;
 

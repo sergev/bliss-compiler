@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #define LLVMGEN_K_PHIREFMAX     256
-#define LLVMGEN_K_MAXARGS       16
+#define LLVMGEN_K_MAXARGS       64
 
 // Branch tracking structure.  There are common patterns
 // for handling LLVM branches and phi values for loops,
@@ -60,6 +60,11 @@ struct llvm_rtntrack_s {
     LLVMBasicBlockRef        bldpos;
     unsigned int             tmpidx;
     unsigned int             lblidx;
+    LLVMValueRef             argcount;  // ACTUALCOUNT, loaded on entry
+    LLVMValueRef             valist;    // va_list started on entry
+    LLVMValueRef             argblock;  // ARGPTR block: count, args...
+    LLVMValueRef             vacopy;    // va_list for reading the block
+    int                      varargs;   // must become a varargs function
 };
 typedef struct llvm_rtntrack_s llvm_rtntrack_t;
 
@@ -212,6 +217,8 @@ LLVMValueRef llvmgen_addr_expression(gencodectx_t gctx, expr_node_t *exp, llvm_a
 LLVMValueRef llvmgen_rtntype_info(gencodectx_t gctx, name_t *np, LLVMTypeRef *func_type, LLVMTypeRef *return_type);
 void llvmgen_deref_push(gencodectx_t gctx, name_t *np);
 void llvmgen_args_to_locals(gencodectx_t gctx, name_t *np);
+LLVMValueRef llvmgen_argcount_global(gencodectx_t gctx);
+void llvmgen_rtn_make_varargs(gencodectx_t gctx, name_t *np);
 void llvmgen_block_begin(gencodectx_t gctx, scopectx_t scope);
 void llvmgen_deref_pop(gencodectx_t gctx, name_t *np);
 void llvmgen_expgen_register(gencodectx_t gctx, exprtype_t type, llvmgen_expgen_fn func);

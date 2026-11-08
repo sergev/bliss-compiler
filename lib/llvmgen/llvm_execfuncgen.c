@@ -63,6 +63,24 @@ llvm_execfuncgen_t gentable[] = {
 };
 #undef FUNCGENDEF
 
+static LLVMValueRef gen_actualcount(gencodectx_t gctx, void *fctx,
+                                    expr_node_t *node, LLVMTypeRef neededtype);
+static LLVMValueRef gen_actualparameter(gencodectx_t gctx, void *fctx,
+                                        expr_node_t *node, LLVMTypeRef neededtype);
+static LLVMValueRef gen_argptr(gencodectx_t gctx, void *fctx,
+                               expr_node_t *node, LLVMTypeRef neededtype);
+
+// Linkage functions (LRM 13.6); BUILTIN names
+static struct {
+    const char *name;
+    unsigned int numargs;
+    llvmgen_execfunc_fn func;
+} lnkfuncs[] = {
+    { "ACTUALCOUNT",     0, gen_actualcount },
+    { "ACTUALPARAMETER", 1, gen_actualparameter },
+    { "ARGPTR",          0, gen_argptr },
+};
+
 /*
  * gen_execfunc
  *
@@ -119,6 +137,18 @@ llvmgen_execfuncgen_init (gencodectx_t gctx)
             fd->genfnctx = (void *)(intptr_t)(addr_signed ? LLVMIntSLT : LLVMIntULT);
         } else {
             fd->genfnctx = gentable[i].fctx;
+        }
+    }
+    for (i = 0; i < sizeof(lnkfuncs)/sizeof(lnkfuncs[0]); i++) {
+        funcdef_t fdef;
+        memset(&fdef, 0, sizeof(fdef));
+        strcpy(fdef.name, lnkfuncs[i].name);
+        fdef.namelen = strlen(lnkfuncs[i].name);
+        fdef.numargs = lnkfuncs[i].numargs;
+        fdef.flags = FUNC_M_BUILTIN;
+        fdef.generator = (execfuncgenerator_fn) lnkfuncs[i].func;
+        if (execfunc_define(kwdscope, &fdef, 0) == 0) {
+            expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_execfuncgen_init");
         }
     }
     gctx->builtinsctx = llvmgen_builtins_init(gctx, kwdscope);
@@ -840,3 +870,210 @@ gen_ch_translate (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef ne
     return llvmgen_adjustval(gctx, result, neededtype, 0);
     
 } /* gen_ch_translate */
+
+/*
+ * Linkage functions: ACTUALCOUNT, ACTUALPARAMETER, ARGPTR (LRM 13.6).
+ *
+ * The caller stores the argument count in the thread-local
+ * bliss_argcount just before each call; the callee loads it on entry.
+ * Arguments beyond the formals are read with va_arg, so a routine that
+ * needs them is turned into a varargs function at its end.
+ */
+
+/*
+ * entry_builder
+ *
+ * Builder positioned at the top of the routine's entry block,
+ * before any call can change bliss_argcount.
+ */
+static LLVMBuilderRef
+entry_builder (gencodectx_t gctx)
+{
+    LLVMBasicBlockRef entry = LLVMGetEntryBasicBlock(gctx->curfn->func);
+    LLVMValueRef first = LLVMGetFirstInstruction(entry);
+    LLVMBuilderRef b = LLVMCreateBuilderInContext(gctx->llvmctx);
+
+    if (first != 0) {
+        LLVMPositionBuilderBefore(b, first);
+    } else {
+        LLVMPositionBuilderAtEnd(b, entry);
+    }
+    return b;
+
+} /* entry_builder */
+
+/*
+ * call_va_intrinsic
+ *
+ * Calls llvm.va_start, llvm.va_copy or llvm.va_end.
+ */
+static void
+call_va_intrinsic (gencodectx_t gctx, LLVMBuilderRef b, const char *name,
+                   LLVMValueRef *args, unsigned int nargs)
+{
+    LLVMTypeRef ptr = LLVMPointerTypeInContext(gctx->llvmctx, 0);
+    unsigned int id = LLVMLookupIntrinsicID(name, strlen(name));
+    size_t ntypes = LLVMIntrinsicIsOverloaded(id) ? 1 : 0;
+    LLVMValueRef fn = LLVMGetIntrinsicDeclaration(gctx->module, id, &ptr, ntypes);
+    LLVMTypeRef ftype = LLVMIntrinsicGetType(gctx->llvmctx, id, &ptr, ntypes);
+
+    LLVMBuildCall2(b, ftype, fn, args, nargs, "");
+
+} /* call_va_intrinsic */
+
+/*
+ * in_routine
+ */
+static int
+in_routine (gencodectx_t gctx, expr_node_t *exp)
+{
+    if (gctx->curfn == 0) {
+        expr_signal(gctx->ectx, STC__LNKFNRTN, name_string(expr_func_name(exp)));
+        return 0;
+    }
+    return 1;
+
+} /* in_routine */
+
+/*
+ * argcount_value
+ */
+static LLVMValueRef
+argcount_value (gencodectx_t gctx)
+{
+    llvm_rtntrack_t *rt = gctx->curfn;
+
+    if (rt->argcount == 0) {
+        LLVMBuilderRef b = entry_builder(gctx);
+        rt->argcount = LLVMBuildLoad2(b, gctx->fullwordtype,
+                                      llvmgen_argcount_global(gctx), "actualcount");
+        LLVMDisposeBuilder(b);
+    }
+    return rt->argcount;
+
+} /* argcount_value */
+
+/*
+ * argblock_fill
+ *
+ * Fills the argument block (count, then each argument) and
+ * returns its address.
+ */
+static LLVMValueRef
+argblock_fill (gencodectx_t gctx)
+{
+    llvm_rtntrack_t *rt = gctx->curfn;
+    LLVMBuilderRef bld = rt->builder;
+    LLVMTypeRef wt = gctx->fullwordtype;
+    LLVMTypeRef blktype = LLVMArrayType(wt, LLVMGEN_K_MAXARGS + 1);
+    LLVMValueRef count = argcount_value(gctx);
+    LLVMValueRef idx[2], v, n, i, inext, phi, args[2];
+    LLVMBasicBlockRef curblk, testblk, bodyblk, doneblk;
+    unsigned int k, nformals = LLVMCountParams(rt->func);
+
+    if (rt->argblock == 0) {
+        LLVMBuilderRef b = entry_builder(gctx);
+        LLVMTypeRef vatype = (machine_scalar_bits(gctx->mach) == 64
+                              ? LLVMArrayType(wt, 3)
+                              : LLVMPointerTypeInContext(gctx->llvmctx, 0));
+        rt->argblock = LLVMBuildAlloca(b, blktype, "argblock");
+        rt->vacopy = LLVMBuildAlloca(b, vatype, "vacopy");
+        rt->valist = LLVMBuildAlloca(b, vatype, "valist");
+        call_va_intrinsic(gctx, b, "llvm.va_start", &rt->valist, 1);
+        LLVMDisposeBuilder(b);
+        rt->varargs = 1;
+    }
+    idx[0] = LLVMConstNull(wt);
+    idx[1] = LLVMConstNull(wt);
+    LLVMBuildStore(bld, count, LLVMBuildGEP2(bld, blktype, rt->argblock, idx, 2, ""));
+    for (k = 0; k < nformals && k < LLVMGEN_K_MAXARGS; k++) {
+        idx[1] = LLVMConstInt(wt, k + 1, 0);
+        v = llvmgen_adjustval(gctx, LLVMGetParam(rt->func, k), wt, 0);
+        LLVMBuildStore(bld, v, LLVMBuildGEP2(bld, blktype, rt->argblock, idx, 2, ""));
+    }
+
+    // The rest come through va_arg
+    args[0] = rt->vacopy;
+    args[1] = rt->valist;
+    call_va_intrinsic(gctx, bld, "llvm.va_copy", args, 2);
+    n = LLVMConstInt(wt, LLVMGEN_K_MAXARGS, 0);
+    n = LLVMBuildSelect(bld, LLVMBuildICmp(bld, LLVMIntUGT, count, n, ""), n, count, "");
+    curblk = LLVMGetInsertBlock(bld);
+    doneblk = llvmgen_exitblock_create(gctx, 0);
+    testblk = LLVMInsertBasicBlockInContext(gctx->llvmctx, doneblk, llvmgen_label(gctx));
+    bodyblk = LLVMInsertBasicBlockInContext(gctx->llvmctx, doneblk, llvmgen_label(gctx));
+    LLVMBuildBr(bld, testblk);
+    LLVMPositionBuilderAtEnd(bld, testblk);
+    phi = LLVMBuildPhi(bld, wt, "");
+    i = LLVMConstInt(wt, nformals, 0);
+    LLVMAddIncoming(phi, &i, &curblk, 1);
+    LLVMBuildCondBr(bld, LLVMBuildICmp(bld, LLVMIntULT, phi, n, ""), bodyblk, doneblk);
+    LLVMPositionBuilderAtEnd(bld, bodyblk);
+    v = LLVMBuildVAArg(bld, rt->vacopy, wt, "");
+    inext = LLVMBuildAdd(bld, phi, LLVMConstInt(wt, 1, 0), "");
+    idx[1] = inext;
+    LLVMBuildStore(bld, v, LLVMBuildGEP2(bld, blktype, rt->argblock, idx, 2, ""));
+    LLVMBuildBr(bld, testblk);
+    LLVMAddIncoming(phi, &inext, &bodyblk, 1);
+    LLVMPositionBuilderAtEnd(bld, doneblk);
+    call_va_intrinsic(gctx, bld, "llvm.va_end", &rt->vacopy, 1);
+
+    return rt->argblock;
+
+} /* argblock_fill */
+
+/*
+ * gen_actualcount
+ */
+static LLVMValueRef
+gen_actualcount (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    if (!in_routine(gctx, exp)) {
+        return LLVMConstNull(neededtype == 0 ? gctx->fullwordtype : neededtype);
+    }
+    return llvmgen_adjustval(gctx, argcount_value(gctx), neededtype, 0);
+
+} /* gen_actualcount */
+
+/*
+ * gen_actualparameter
+ */
+static LLVMValueRef
+gen_actualparameter (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    expr_node_t *arg = exprseq_head(expr_func_arglist(exp));
+    LLVMTypeRef wt = gctx->fullwordtype;
+    LLVMValueRef blk, idx[2];
+
+    if (!in_routine(gctx, exp)) {
+        return LLVMConstNull(neededtype == 0 ? wt : neededtype);
+    }
+    if (expr_type(arg) == EXPTYPE_PRIM_LIT) {
+        long i = expr_litval(arg);
+        if (i >= 1 && i <= (long) LLVMCountParams(gctx->curfn->func)) {
+            return llvmgen_adjustval(gctx, LLVMGetParam(gctx->curfn->func, (unsigned) i - 1),
+                                     neededtype, 0);
+        }
+    }
+    idx[0] = LLVMConstNull(wt);
+    idx[1] = llvmgen_expression(gctx, arg, wt);
+    blk = argblock_fill(gctx);
+    blk = LLVMBuildGEP2(gctx->curfn->builder, LLVMArrayType(wt, LLVMGEN_K_MAXARGS + 1),
+                        blk, idx, 2, "");
+    return llvmgen_adjustval(gctx, LLVMBuildLoad2(gctx->curfn->builder, wt, blk, ""),
+                             neededtype, 0);
+
+} /* gen_actualparameter */
+
+/*
+ * gen_argptr
+ */
+static LLVMValueRef
+gen_argptr (gencodectx_t gctx, void *ctx, expr_node_t *exp, LLVMTypeRef neededtype)
+{
+    if (!in_routine(gctx, exp)) {
+        return LLVMConstNull(neededtype == 0 ? gctx->fullwordtype : neededtype);
+    }
+    return llvmgen_adjustval(gctx, argblock_fill(gctx), neededtype, 0);
+
+} /* gen_argptr */

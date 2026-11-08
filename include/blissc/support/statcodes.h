@@ -173,7 +173,8 @@ STATCODE(122,E,LIBRDERR,  "error reading library file !SZ") \
 STATCODE(123,E,LIBOPNERR, "could not open library file !SD") \
 STATCODE(124,E,DCLAFTEXP, "declarations must precede expressions in a block") \
 STATCODE(125,F,MACDEPTH,  "macro expansions nested too deeply (runaway recursion?)") \
-STATCODE(126,E,CASERANGE, "case label outside the FROM-TO range of CASE")
+STATCODE(126,E,CASERANGE, "case label outside the FROM-TO range of CASE") \
+STATCODE(127,E,LNKFNRTN,  "!SD can only be used inside a routine")
 
 typedef unsigned int statcode_t;
 #ifdef STATCODES_INSTANTIATE

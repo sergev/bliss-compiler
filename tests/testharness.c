@@ -19,6 +19,15 @@ long TEST_EXTDATA[3] = { 10, 20, 30 };
 __asm__(".globl TEST_EXTLIT\n.set TEST_EXTLIT, 1234");
 extern char TEST_GLOBLIT[] __attribute__((weak));   /* defined by misc.bli */
 long TEST_GLOBLIT_VALUE (void) { return (long) TEST_GLOBLIT; }
+
+/* ACTUALCOUNT from C: set bliss_argcount before the call */
+__thread long bliss_argcount __attribute__((weak));
+extern long TEST_AVERAGE (long, long, long) __attribute__((weak));   /* defined by routines.bli */
+long TEST_CALL_AVERAGE (void)
+{
+    bliss_argcount = 3;
+    return TEST_AVERAGE(10, 20, 30);
+}
 void RUNTEST(int);
 
 void

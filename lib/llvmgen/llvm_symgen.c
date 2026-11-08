@@ -955,6 +955,69 @@ llvmgen_args_to_locals (gencodectx_t gctx, name_t *np)
 } /* llvmgen_args_to_locals */
 
 /*
+ * llvmgen_argcount_global
+ *
+ * The thread-local cell in which a caller passes the number of
+ * arguments (for ACTUALCOUNT). Weak, so each module can define it.
+ */
+LLVMValueRef
+llvmgen_argcount_global (gencodectx_t gctx)
+{
+    static const char name[] = "bliss_argcount";
+    LLVMValueRef g = LLVMGetNamedGlobal(gctx->module, name);
+
+    if (g == 0) {
+        g = LLVMAddGlobal(gctx->module, gctx->fullwordtype, name);
+        LLVMSetInitializer(g, LLVMConstNull(gctx->fullwordtype));
+        LLVMSetLinkage(g, LLVMWeakAnyLinkage);
+        LLVMSetThreadLocal(g, 1);
+        LLVMSetThreadLocalMode(g, LLVMInitialExecTLSModel);
+    }
+    return g;
+
+} /* llvmgen_argcount_global */
+
+/*
+ * llvmgen_rtn_make_varargs
+ *
+ * Turns a routine into a varargs function, for ACTUALPARAMETER and
+ * ARGPTR, by moving its body into a new function.
+ */
+void
+llvmgen_rtn_make_varargs (gencodectx_t gctx, name_t *np)
+{
+    llvm_rtnsym_t *lr = sym_genspace(np);
+    LLVMValueRef oldfn = lr->func, newfn;
+    LLVMTypeRef ptypes[LLVMGEN_K_MAXARGS];
+    LLVMBasicBlockRef bb;
+    const char *sect;
+    unsigned int i, n = LLVMCountParamTypes(lr->type);
+
+    if (LLVMIsFunctionVarArg(lr->type)) return;
+    LLVMGetParamTypes(lr->type, ptypes);
+    lr->type = LLVMFunctionType(lr->returntype, ptypes, n, 1);
+    LLVMSetValueName(oldfn, "$$function.for.replacement");
+    newfn = LLVMAddFunction(gctx->module, name_azstring(np), lr->type);
+    LLVMSetLinkage(newfn, LLVMGetLinkage(oldfn));
+    sect = LLVMGetSection(oldfn);
+    if (sect != 0 && *sect != '\0') LLVMSetSection(newfn, sect);
+    for (i = 0; i < n; i++) {
+        size_t len;
+        LLVMValueRef oldp = LLVMGetParam(oldfn, i), newp = LLVMGetParam(newfn, i);
+        LLVMSetValueName2(newp, LLVMGetValueName2(oldp, &len), len);
+        LLVMReplaceAllUsesWith(oldp, newp);
+    }
+    while ((bb = LLVMGetFirstBasicBlock(oldfn)) != 0) {
+        LLVMRemoveBasicBlockFromParent(bb);
+        LLVMAppendExistingBasicBlock(newfn, bb);
+    }
+    LLVMReplaceAllUsesWith(oldfn, newfn);
+    LLVMDeleteFunction(oldfn);
+    lr->func = newfn;
+
+} /* llvmgen_rtn_make_varargs */
+
+/*
  * llvmgen_rtntype_info
  *
  * Returns LLVM type info about a routine.

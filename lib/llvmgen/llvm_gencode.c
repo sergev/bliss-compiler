@@ -164,6 +164,10 @@ gencode_routine_end (gencodectx_t gctx, name_t *np)
         LLVMBuildRet(rt->builder, val);
     }
     LLVMDisposeBuilder(rt->builder);
+    if (rt->varargs) {
+        llvmgen_rtn_make_varargs(gctx, np);
+        thisfn = llvmgen_rtntype_info(gctx, np, 0, 0);
+    }
     gctx->curfn = rt->next;
     rt->next = gctx->freerts;
     gctx->freerts = rt;
@@ -386,6 +390,8 @@ gen_main (gencodectx_t gctx, name_t *modnp)
     mainfn = LLVMAddFunction(gctx->module, "main", LLVMFunctionType(i32type, params, 2, 0));
     builder = LLVMCreateBuilderInContext(gctx->llvmctx);
     LLVMPositionBuilderAtEnd(builder, LLVMAppendBasicBlockInContext(gctx->llvmctx, mainfn, "entry"));
+    LLVMBuildStore(builder, LLVMConstInt(gctx->fullwordtype, nargs, 0),
+                   llvmgen_argcount_global(gctx));
     val = LLVMBuildCall2(builder, fntype, rtn, args, nargs, "");
     rettype = LLVMGetReturnType(fntype);
     if (LLVMGetTypeKind(rettype) == LLVMIntegerTypeKind) {

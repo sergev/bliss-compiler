@@ -328,6 +328,13 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
         for (i = argcount; i < formalcount; i++) argvals[i] = LLVMConstNull(argtypes[i]);
         argcount = formalcount;
     }
+    if (argcount > formalcount && !LLVMIsFunctionVarArg(type)) {
+        // extra arguments, for ACTUALPARAMETER
+        type = LLVMFunctionType(rettype, argtypes, formalcount, 1);
+    }
+    // number of arguments, for ACTUALCOUNT
+    LLVMBuildStore(gctx->curfn->builder, LLVMConstInt(gctx->fullwordtype, argcount, 0),
+                   llvmgen_argcount_global(gctx));
 
     if (LLVMGetTypeKind(rettype) == LLVMVoidTypeKind) {
         result = 0;
