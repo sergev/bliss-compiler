@@ -193,6 +193,42 @@ value_toggle_dispatch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, name_t *t
 } /* value_toggle_dispatch */
 
 /*
+ * ignore_switch
+ *
+ * Accepts and ignores a switch that has no meaning for this
+ * compiler's targets, e.g. ADDRESSING_MODE (...) or LANGUAGE (...).
+ */
+static int
+ignore_switch (parse_ctx_t pctx, void *ctx, lextype_t dcltype, lexeme_t *swlex)
+{
+    if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_LPAR, 0, 1)) {
+        int depth = 1;
+        while (depth > 0) {
+            lextype_t lt = parser_next(pctx, QL_NORMAL, 0);
+            if (lt == LEXTYPE_END || lt == LEXTYPE_NONE) break;
+            if (lt == LEXTYPE_DELIM_LPAR) depth += 1;
+            else if (lt == LEXTYPE_DELIM_RPAR) depth -= 1;
+        }
+    }
+    return 1;
+
+} /* ignore_switch */
+
+/*
+ * switches_ignored_declare
+ *
+ * Declares the switches that are accepted but ignored.
+ */
+void
+switches_ignored_declare (scopectx_t scope)
+{
+    switch_special_declare(scope, LEXTYPE_SWITCH_ADDRMODE, ignore_switch, 0);
+    switch_special_declare(scope, LEXTYPE_SWITCH_LANGUAGE, ignore_switch, 0);
+    switch_special_declare(scope, LEXTYPE_SWITCH_ENV, ignore_switch, 0);
+
+} /* switches_ignored_declare */
+
+/*
  * parse_switches
  *
  * Parses SWITCHES declarations and MODULE switches.

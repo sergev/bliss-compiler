@@ -28,6 +28,7 @@ int value_toggle_declare(scopectx_t scope, strdesc_t *name,
                          name_t **on_name, name_t **off_name);
 int value_toggle_dispatch(parse_ctx_t pctx, void *ctx, lextype_t dcltype,
                           name_t *togname);
+void switches_ignored_declare(scopectx_t scope);
 int parse_switches(parse_ctx_t pctx, lextype_t decltype, lextype_t terminator);
 
 #endif /* switches_h__ */

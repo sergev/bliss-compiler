@@ -18,6 +18,7 @@
 #include "blissc/parser.h"
 #include "blissc/lexer.h"
 #include "blissc/libgen.h"
+#include "blissc/switches.h"
 
 #define MAX_SEARCH_PATHS    32
 // Parser context structure
@@ -340,6 +341,7 @@ parser_init (strctx_t strctx, namectx_t namectx, machinedef_t *mach,
     for (i = 0; i < sizeof(parser_names)/sizeof(parser_names[0]); i++) {
         name_declare(kwdscope, &parser_names[i], 0, 0, 0, 0);
     }
+    switches_ignored_declare(kwdscope);
 
     pctx = malloc(sizeof(struct parse_ctx_s));
     if (pctx != 0) {
@@ -488,6 +490,28 @@ parser_lexfunc_register (parse_ctx_t pctx, void *ctx, lextype_t lt, lexfunc_t fn
 } /* parser_lexfunc_register */
 
 /*
+ * vms_strip_device
+ *
+ * Drops a VMS device or logical name prefix ("SYS$LIBRARY:")
+ * and directory ("[DIR]") from a file specification, so that
+ * the remaining name is looked up in the search paths.
+ */
+static void
+vms_strip_device (const char **fnamep, size_t *fnlenp)
+{
+    const char *fname = *fnamep;
+    size_t len = *fnlenp, i, start = 0;
+
+    for (i = 0; i < len; i++) {
+        if (fname[i] == '/') return;    // a Unix path
+        if (fname[i] == ':' || fname[i] == ']' || fname[i] == '>') start = i + 1;
+    }
+    *fnamep = fname + start;
+    *fnlenp = len - start;
+
+} /* vms_strip_device */
+
+/*
  * parser_fopen
  *
  * Begin parsing a REQUIREd file:
@@ -505,6 +529,7 @@ parser_fopen (parse_ctx_t pctx, const char *fname, size_t fnlen, char **actnamep
 
     memset(&pp, 0, sizeof(pp));
     memset(&mainpp, 0, sizeof(mainpp));
+    vms_strip_device(&fname, &fnlen);
     if (file_splitname(pctx->fioctx, fname, (int)fnlen, 0, &pp) == 0) {
         return 0;
     }
@@ -578,9 +603,13 @@ parser_lib_process (parse_ctx_t pctx, strdesc_t *libname)
     size_t orig_dirnamelen;
     char *orig_dirname;
 
+    const char *lname = libname->ptr;
+    size_t lnamelen = libname->len;
+
     memset(&pp, 0, sizeof(pp));
     memset(&mainpp, 0, sizeof(mainpp));
-    if (file_splitname(pctx->fioctx, libname->ptr, (int)libname->len, 0, &pp) == 0) {
+    vms_strip_device(&lname, &lnamelen);
+    if (file_splitname(pctx->fioctx, lname, (int)lnamelen, 0, &pp) == 0) {
         return 0;
     }
     // XXX - should provide for target-specific suffixes as well
