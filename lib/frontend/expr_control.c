@@ -230,6 +230,11 @@ parse_case (expr_ctx_t ctx, lextype_t lt, lexeme_t *curlex)
                         endval = beginval;
                     }
                 }
+                if (beginval < lo || endval > hi) {
+                    expr_signal(ctx, STC__CASERANGE);
+                    if (beginval < lo) beginval = lo;
+                    if (endval > hi) endval = hi;
+                }
                 for (i = beginval-lo; i <= endval-lo; todo[i++] = 1);
             }
             if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_RBRACK, 0, 1)) {
@@ -265,6 +270,10 @@ parse_case (expr_ctx_t ctx, lextype_t lt, lexeme_t *curlex)
                 }
                 cases[i] = unique_actions;
             }
+        }
+        if (unique_actions > ncases) {
+            // more actions than values (e.g. out-of-range labels)
+            unique = realloc(unique, (unique_actions+1)*sizeof(expr_node_t *));
         }
         unique[unique_actions++] = exp;
         if (parser_expect(pctx, QL_NORMAL, LEXTYPE_DELIM_SEMI, 0, 1)) {

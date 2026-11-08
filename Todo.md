@@ -3,18 +3,7 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## 1. Field names in general structure references
-
-`.BLOCK [v, f]` fails with EXPREXP; only `BLOCK [v, 0, 0, 8, 0]` works.
-
-- `lib/frontend/structures.c` (general reference parse, ~line 985): the
-  access actuals are taken lexically, so field names are never expanded.
-  Expand a field name into its component list, as ordinary structure
-  references do.
-- Also accept a field-set name with the `FIELD` attribute in that context.
-- Test: `BLOCK [.p, nd_kind]`, both fetch and store.
-
-## 2. Overlapping fields in PRESET
+## T2. Overlapping fields in PRESET
 
 `PRESET` with fields that share bits in one unit gives PROVERLAP.
 
@@ -23,7 +12,7 @@ a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
   two fields set the same bits.
 - Test: BLOCK with `[0,0,4,0]` and `[0,4,4,0]` preset; check the byte.
 
-## 3. ACTUALCOUNT and ACTUALPARAMETER
+## T3. ACTUALCOUNT and ACTUALPARAMETER
 
 Both report UNDCLNAME.
 
@@ -40,7 +29,7 @@ Both report UNDCLNAME.
   against the declaration (warning).
 - Test: a routine called with 0, 1 and 3 arguments.
 
-## 4. WEAK attribute
+## T4. WEAK attribute
 
 - Parse `WEAK` in attribute lists (`declarations.c`) for `GLOBAL LITERAL`,
   `EXTERNAL LITERAL`, `GLOBAL` and `EXTERNAL` data and routines.
@@ -48,7 +37,7 @@ Both report UNDCLNAME.
   `LLVMWeakAnyLinkage` for globals (`llvm_symgen.c`).
 - Test: an `EXTERNAL x : WEAK` that nothing defines has address 0.
 
-## 5. %SWITCHES lexical function
+## T5. %SWITCHES lexical function
 
 - `lib/frontend/switches.c` already knows the toggles; record their current
   on/off state per scope and return 1/0 from `%SWITCHES (name, ...)`.
@@ -56,7 +45,7 @@ Both report UNDCLNAME.
 - The ignored toggles (OPTIMIZE, SAFE, UNAMES, ZIP) still keep state.
 - Test: `%IF %SWITCHES (ZIP) %THEN ...` with SWITCHES ZIP and NOZIP.
 
-## 6. LINKAGE declarations
+## T6. LINKAGE declarations
 
 Currently SYNTAXERR. Implement only what maps onto LLVM calling conventions.
 
@@ -72,9 +61,9 @@ Currently SYNTAXERR. Implement only what maps onto LLVM calling conventions.
   default linkage name and allow user ones (`expression.c` ~line 1392).
 - Test: two routines with a non-default linkage calling each other.
 
-## 7. GLOBAL REGISTER and EXTERNAL REGISTER
+## T7. GLOBAL REGISTER and EXTERNAL REGISTER
 
-Variables pinned to a named machine register. Depends on 6.
+Variables pinned to a named machine register. Depends on T6.
 
 - Parse in `declarations.c`; the register number maps to an x86 register
   name in `llvm_machines.c`.
@@ -83,7 +72,7 @@ Variables pinned to a named machine register. Depends on 6.
   LLVM on x86; check before committing to this task).
 - If LLVM cannot support it, report a clear error instead of EXPREXP.
 
-## 8. Condition handling: ENABLE, SIGNAL, SIGNAL_STOP, SETUNWIND
+## T8. Condition handling: ENABLE, SIGNAL, SIGNAL_STOP, SETUNWIND
 
 The largest task; VMS-style handlers.
 
@@ -111,19 +100,19 @@ The largest task; VMS-style handlers.
   VMS library (STARLET), so provide equivalents in the runtime library.
 - Test: signal caught, resignalled, and unwound.
 
-## 9. INTERRUPT linkage type
+## T9. INTERRUPT linkage type
 
-Depends on 6. In the LRM, INTERRUPT is a linkage-type, not a routine
+Depends on T6. In the LRM, INTERRUPT is a linkage-type, not a routine
 attribute (BLISS-16 13.2.4.1, BLISS-32 13.3.4.2; BLISS-36 has
 PS_INTERRUPT); a routine gets it through `LINKAGE l = INTERRUPT;` and
 `ROUTINE r : l`. Such a routine must not be called directly.
 
-- Accept `INTERRUPT` as a linkage-type in task 6; map it to the LLVM
+- Accept `INTERRUPT` as a linkage-type in T6; map it to the LLVM
   `x86_intrcc` calling convention. Reject direct calls to it.
 - Test: compile-only check of the emitted calling convention (`!! cout`
   or object inspection).
 
-## 10. %ASCID string descriptors
+## T10. %ASCID string descriptors
 
 - Emit a static descriptor (length word, type, class, pointer) followed by
   the string, as a PLIT-like constant (`lexeme.c`/`execfuncs.c` for the
@@ -131,7 +120,7 @@ PS_INTERRUPT); a routine gets it through `LINKAGE l = INTERRUPT;` and
 - Choose the descriptor layout for 64-bit (length 16 bits, pointer 64).
 - Test: fetch length and characters through the descriptor.
 
-## 11. Floating point
+## T11. Floating point
 
 Largest front-end change; lowest priority.
 

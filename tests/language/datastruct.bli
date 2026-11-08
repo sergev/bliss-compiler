@@ -2,7 +2,8 @@ MODULE test =
 BEGIN
 
 ! Data structures (LRM 11): VECTOR, BITVECTOR, BLOCK, BLOCKVECTOR,
-! user STRUCTUREs, FIELDs, field-references, %SIZE, %ALLOCATION.
+! user STRUCTUREs, FIELDs, field-references, %SIZE, %ALLOCATION,
+! general structure references with field names.
 
 LIBRARY 'testharness.lib';
 
@@ -52,13 +53,13 @@ BEGIN
     .s
 END;
 
-test_setup(numcases=22);
+test_setup(numcases=23);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL v, p, s;
 
-    CASE .caseno FROM 1 TO 22 OF
+    CASE .caseno FROM 1 TO 23 OF
     SET
         [1] : BEGIN
             ub[0] = 255; ub[1] = 256 + 7;
@@ -195,6 +196,16 @@ BEGIN
             test_output(.caseno, 'subbyte=%lx,%lx,%ld', .s, .wv, .bits[9]);
         END;
 !! 22 subbyte=abc0,abc0,1
+        [23] : BEGIN
+            ! general structure references with field names (LRM 11.5.3)
+            p = nd2;
+            BLOCK [.p, nd_kind] = 5;
+            BLOCK [.p, nd_sval] = -2;
+            BLOCKVECTOR [nodes, 1, nd_data; 2, node_size] = 66;
+            test_output(.caseno, 'genfield=%ld,%ld,%ld,%ld', .BLOCK [.p, nd_kind],
+                .nd2[nd_sval], .BLOCKVECTOR [nodes, 1, nd_data; 2, node_size], .nodes[1, nd_data]);
+        END;
+!! 23 genfield=5,-2,66,66
     TES;
 END;
 

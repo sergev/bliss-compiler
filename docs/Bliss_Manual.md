@@ -684,7 +684,13 @@ Apply a structure to any address without declaring a name:
 ```bliss
 x = .VECTOR [.p, 2];            ! element 2 of the vector at .p
 BLOCK [.q, 1, 0, 8, 0] = 1;     ! a field of the block at .q
+BLOCK [.q, nd_kind] = 1;        ! the same, with a field name
+BLOCKVECTOR [.r, 2, nd_kind; 4, 3] = 0;   ! allocation actuals after ';'
 ```
+
+Allocation actuals that the access expression needs (here the block size
+of a `BLOCKVECTOR`) must be given after `;`; the declaration that would
+supply them is not there.
 
 ### Size functions
 

@@ -59,6 +59,7 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
                 runout.append('TEST {:03d}: {}'.format(caseno, result.strip()))
 
     barename = os.path.splitext(os.path.basename(testfile))[0]
+    compfailed = False
     try:
         docompile = subprocess.run([blissc, '-o', barename + '.o', '-I', '.', testfile],
                                    capture_output=True, encoding='utf-8', check=True)
@@ -71,7 +72,7 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
         if err.returncode > 0 and len(comperrs) > 0:
             o = err.stdout.split('\n')
             e = [line for line in err.stderr.split('\n') if line.startswith('%')]
-            pass
+            compfailed = True
         else:
             print(("  FAIL: compilation failed ({}) for {}" +
                    "\n        {}").format(err.returncode, testfile,
@@ -107,6 +108,14 @@ def process_test(testfile, blissc, cc, testharness, quiet=False, prefix='!!'):
                     print("        actual: {}".format(cur))
     if not quiet and failures == 0:
         print("  compilation phase passed")
+
+    # Compile-only test: expected errors, nothing to run
+    if compfailed and cases == 0:
+        cases = len(comperrs)
+        passes = len(comperrs) if failures == 0 else 0
+        if not quiet:
+            print("  {:d} of {:d} test cases passed".format(passes, cases))
+        return cases, passes, failures
 
     # A test with "out"/"status" lines is a standalone program (MAIN=)
     standalone = status is not None or any(not s.startswith('TEST ') for s in runout)

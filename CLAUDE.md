@@ -31,7 +31,7 @@ ctest --test-dir build -R lexical/literals --output-on-failure
 Each test is a `.bli` module that does `LIBRARY 'testharness.lib'`, calls `test_setup(numcases=N)`, and defines `GLOBAL ROUTINE runtest(caseno)`. Expected results are comments starting with `!!`:
 - `!! <n> <text>`: runtime output for case n (printed as `TEST 00n: <text>` by `test_output`)
 - `!! cout <text>`: a line expected on compiler stdout
-- `!! cerr <prefix>`: expected compiler diagnostic (lines starting with `%`), matched in order
+- `!! cerr <prefix>`: expected compiler diagnostic (lines starting with `%`), matched in order. A test with only `cerr` lines whose compilation fails stops after the compile phase (`tests/errors/`).
 - `!! out <text>` / `!! status <n>`: a stdout line / exit status of a standalone program (a `MAIN =` module, linked without the harness; see `language/mainrtn.bli`)
 
 The runner compiles the test with `blissc -o x.o -I .`, links it with `tests/testharness.c` using the C compiler, runs it, and compares output.

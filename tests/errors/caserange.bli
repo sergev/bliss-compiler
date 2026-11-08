@@ -1,0 +1,16 @@
+MODULE test =
+BEGIN
+
+! Compile-time errors: each !! cerr line must match a diagnostic, in order.
+
+ROUTINE r (x) =
+    CASE .x FROM 1 TO 2 OF
+    SET
+    [1]: 10;
+    [2]: 20;
+    [3]: 30;
+!! cerr %BLISS-E-CASERANGE,
+    TES;
+
+END
+ELUDOM

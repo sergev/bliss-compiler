@@ -38,6 +38,16 @@ struct strudef_s {
 static lextype_t bodyends[] = { LEXTYPE_DELIM_COMMA, LEXTYPE_DELIM_SEMI };
 static strdesc_t leftparen = STRDEF("(");
 static strdesc_t rightparen = STRDEF(")");
+static strdesc_t rightbrack = STRDEF("]");
+static strdesc_t comma = STRDEF(",");
+static strdesc_t semicolon = STRDEF(";");
+
+static strdesc_t *
+delim_string (lextype_t delim)
+{
+    return (delim == LEXTYPE_DELIM_RBRACK ? &rightbrack
+            : delim == LEXTYPE_DELIM_COMMA ? &comma : &semicolon);
+}
 static strdesc_t zero = STRDEF("0");
 static namedef_t mynames[] = {
     NAMEDEF("%FIELDEXPAND", LEXTYPE_LXF_FIELDEXPAND, NAME_M_RESERVED),
@@ -1040,6 +1050,22 @@ structure_reference (expr_ctx_t ctx, name_t *struname, int ctce_accessors,
                                       &seq, &delim)) {
                     expr_signal(ctx, STC__SYNTAXERR);
                     break;
+                }
+                // General reference: a field name stands for its components
+                if (symname == 0 && lexseq_length(&seq) == 1 &&
+                    lexeme_type(lexseq_head(&seq)) == LEXTYPE_NAME_FIELD) {
+                    name_t *fnp = lexeme_ctx_get(lexseq_head(&seq));
+                    lexseq_t fseq;
+                    lexseq_free(lctx, &seq);
+                    lexseq_init(&fseq);
+                    lexseq_copy(lctx, &fseq, field_lexseq(fnp));
+                    lexseq_instail(&fseq, lexeme_create(lctx, delim, delim_string(delim)));
+                    parser_insert_seq(pctx, &fseq);
+                    if (!parse_lexeme_seq(pctx, 0, QL_NORMAL, delims, ndelims,
+                                          &seq, &delim)) {
+                        expr_signal(ctx, STC__SYNTAXERR);
+                        break;
+                    }
                 }
                 if (ctce_accessors) {
                     lexseq_t testseq;
