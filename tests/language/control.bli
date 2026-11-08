@@ -78,13 +78,13 @@ BEGIN
     3
 END;
 
-test_setup(numcases=30);
+test_setup(numcases=32);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL v, n;
 
-    CASE .caseno FROM 1 TO 30 OF
+    CASE .caseno FROM 1 TO 32 OF
     SET
         [1] : test_output(.caseno, 'if=%ld,%ld,%ld', ifval(-5), ifval(0), ifval(9));
 !! 1 if=-1,0,1
@@ -246,6 +246,19 @@ BEGIN
             test_output(.caseno, 'constcase=%ld', .v);
         END;
 !! 30 constcase=6
+        [31] : BEGIN
+            ! No TO: no end test
+            v = (INCR i FROM 1 DO IF .i EQL 5 THEN EXITLOOP .i * 3);
+            test_output(.caseno, 'incrnoto=%ld', .v);
+        END;
+!! 31 incrnoto=15
+        [32] : BEGIN
+            ! No FROM: DECR starts at the largest signed value
+            n = 0;
+            DECR i TO (1 ^ (%BPVAL - 1)) - 3 DO n = .n + 1;
+            test_output(.caseno, 'decrnofrom=%ld', .n);
+        END;
+!! 32 decrnofrom=3
     TES;
 END;
 
