@@ -183,11 +183,18 @@ gen_fetch (gencodectx_t gctx, expr_node_t *rhs, LLVMTypeRef neededtype)
             LLVMValueRef neg1 = LLVMConstAllOnes(gctx->fullwordtype);
             LLVMValueRef mask;
 
-            mask = LLVMBuildShl(builder, neg1, accinfo.sizeval, llvmgen_temp(gctx));
-            mask = LLVMBuildNeg(builder, mask, llvmgen_temp(gctx));
-            val = LLVMBuildAnd(builder, val, mask, llvmgen_temp(gctx));
             if (signext) {
-                val = LLVMBuildSExt(builder, val, gctx->fullwordtype, llvmgen_temp(gctx));
+                // Move the field's sign bit to the top, then shift back
+                LLVMValueRef sh = LLVMBuildSub(builder,
+                    LLVMConstInt(gctx->fullwordtype, machine_scalar_bits(gctx->mach), 0),
+                    llvmgen_adjustval(gctx, accinfo.sizeval, gctx->fullwordtype, 0),
+                    llvmgen_temp(gctx));
+                val = LLVMBuildShl(builder, val, sh, llvmgen_temp(gctx));
+                val = LLVMBuildAShr(builder, val, sh, llvmgen_temp(gctx));
+            } else {
+                mask = LLVMBuildShl(builder, neg1, accinfo.sizeval, llvmgen_temp(gctx));
+                mask = LLVMBuildNot(builder, mask, llvmgen_temp(gctx));
+                val = LLVMBuildAnd(builder, val, mask, llvmgen_temp(gctx));
             }
         }
     }

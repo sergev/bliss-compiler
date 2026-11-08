@@ -123,6 +123,8 @@ llvmgen_addr_expression (gencodectx_t gctx, expr_node_t *exp,
             if (!was_fldref) {
                 accinfo->flags |= sflags | LLVMGEN_M_ACC_CONSTSIZ;
                 accinfo->width = accinfo->size = expr_seg_width(base);
+                // e.g. a sign-extended field folded into a segment reference
+                if (expr_seg_signext(base)) accinfo->flags |= LLVMGEN_M_SEG_SIGNEXT;
             } else if (accinfo->width == 0) {
                 accinfo->width = expr_seg_width(base);
             }
