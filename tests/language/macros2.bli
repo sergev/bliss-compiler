@@ -1,0 +1,129 @@
+MODULE test =
+BEGIN
+
+! Macros (LRM 16) and lexical functions (LRM 15), mostly using
+! the manual's own examples.
+
+LIBRARY 'testharness.lib';
+
+MACRO
+    ! LRM 16.3.4.1: simple, conditional and iterative macros
+    sm1 (f1, f2, f3) = ((f1(f2) + f1(f3)) / 2) %,
+    cm1 (f1, f2)[] = f1 = .f1 ^ -f2; cm1(%REMAINING) %,
+    im1 (f1)[f2] = f1 + f2 %,
+    ! LRM 16.3.4.2: default punctuation
+    shift [a, b] = a ^ b %,
+    ! iteration count
+    itcount [a] = %COUNT %,
+    ! recursion depth
+    depth (a)[] = %IF %NULL (%REMAINING) %THEN %COUNT %ELSE depth (%REMAINING) %FI %,
+    ! compile-time recursion
+    cfact (n)[] = %IF n LEQ 1 %THEN 1 %ELSE n * cfact (%NUMBER (n - 1)) %FI %,
+    nargs [] = %LENGTH %,
+    ! %NAME builds names, after LRM 15.5.4.2
+    defvar (nm, val) = OWN nm : INITIAL (val); ROUTINE %NAME (nm, '_GET') = .nm; %,
+    ! a macro that defines a macro
+    mkconst (nm, val) = MACRO nm = val %QUOTE % %,
+    ! %EXITMACRO
+    firstpos [a] = %IF a GTR 0 %THEN a %EXITMACRO %FI %,
+    ! empty conditional
+    nothing [] = 99 %;
+
+KEYWORDMACRO
+    ! LRM 16.3.4.1 keyword macro, with a default
+    scaled (val, factor = 10, offset = 0) = (val * factor + offset) %;
+
+defvar (counter, 42)
+mkconst (seven, 7);
+
+ROUTINE rout (x) = .x * 4;
+
+test_setup(numcases=20);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    LOCAL a, b, c, v;
+
+    CASE .caseno FROM 1 TO 20 OF
+    SET
+        [1] : BEGIN
+            a = 1; b = 2;
+            test_output(.caseno, 'simple=%ld', sm1 (rout, 0, .a + .b));
+        END;
+!! 1 simple=6
+        [2] : BEGIN
+            a = 64; b = 64; c = 64;
+            cm1 (a, 0, b, 6, c, 2)
+            test_output(.caseno, 'conditional=%ld,%ld,%ld', .a, .b, .c);
+        END;
+!! 2 conditional=64,1,16
+        [3] : BEGIN
+            BIND p = PLIT (im1 (2, 10, 20, 30, 40)) : VECTOR;
+            test_output(.caseno, 'iterative=%ld,%ld,%ld', .p[-1], .p[0], .p[3]);
+        END;
+!! 3 iterative=4,12,42
+        [4] : BEGIN
+            BIND p = PLIT (shift (1, 2, 3, 4, 5, 6)) : VECTOR;
+            v = 0 + shift (1, 2, 3, 4);
+            test_output(.caseno, 'punct=%ld,%ld,%ld', .p[-1], .p[2], .v);
+        END;
+!! 4 punct=3,320,52
+        [5] : BEGIN
+            BIND p = PLIT (itcount (x, y, z)) : VECTOR;
+            test_output(.caseno, 'count=%ld,%ld,%ld', .p[0], .p[1], .p[2]);
+        END;
+!! 5 count=0,1,2
+        [6] : test_output(.caseno, 'depth=%ld,%ld', depth (a), depth (a, b, c, d));
+!! 6 depth=0,3
+        [7] : test_output(.caseno, 'ctfact=%ld', cfact (6));
+!! 7 ctfact=720
+        [8] : test_output(.caseno, 'length=%ld,%ld', nargs (a, b, c), nargs (1));
+!! 8 length=3,1
+        [9] : test_output(.caseno, 'keyword=%ld,%ld,%ld', scaled (val = 5),
+                scaled (offset = 1, val = 2, factor = 3), scaled (factor = 2, val = 4));
+!! 9 keyword=50,7,8
+        [10] : test_output(.caseno, 'name=%ld,%ld', counter_get (), .%NAME ('COUNTER'));
+!! 10 name=42,42
+        [11] : test_output(.caseno, 'nested=%ld', seven * 6);
+!! 11 nested=42
+        [12] : test_output(.caseno, 'exitmacro=%ld', firstpos (5));
+!! 12 exitmacro=5
+        [13] : test_output(.caseno, 'emptycond=%ld,%ld', %NULL (nothing ()), nothing (1));
+!! 13 emptycond=1,99
+        [14] : test_output(.caseno, 'string=%s,%s,%s',
+                UPLIT (%STRING ('ABC', %C'A', %CHAR (0))),
+                UPLIT (%STRING (%O'77', %X'77', %CHAR (0))),
+                UPLIT (%STRING (, x, , y, %CHAR (0))));
+!! 14 string=ABC65,63119,XY
+        [15] : test_output(.caseno, 'exact=%s,%s,%s',
+                UPLIT (%EXACTSTRING (6, %C'X', 'ABC'), %CHAR (0)),
+                UPLIT (%EXACTSTRING (2, %C'X', 'ABC'), %CHAR (0)),
+                UPLIT (%EXACTSTRING (4, 89, 'X'), %CHAR (0)));
+!! 15 exact=ABCXXX,AB,XYYY
+        [16] : test_output(.caseno, 'null=%ld,%ld,%ld,%ld', %NULL (), %NULL (, , ), %NULL (, alpha),
+                %NULL (%EXACTSTRING (0, 0, 'ABC')));
+!! 16 null=1,1,0,0
+        [17] : test_output(.caseno, 'identical=%ld,%ld,%ld,%ld,%ld',
+                %IDENTICAL (3, %CHARCOUNT ('ABC')), %IDENTICAL (%O'77', 63),
+                %IDENTICAL (alpha, ALPHA), %IDENTICAL ('ALPHA', 'alpha'), %IDENTICAL (32, '32'));
+!! 17 identical=1,1,1,0,0
+        [18] : test_output(.caseno, 'isstring=%ld,%ld,%ld', %ISSTRING ('abc'), %ISSTRING (12),
+                %ISSTRING ('a', 'b'));
+!! 18 isstring=1,0,1
+        [19] : BEGIN
+            COMPILETIME ct = 0;
+            %ASSIGN (ct, 0)
+            %ASSIGN (ct, ct + 5)
+            %ASSIGN (ct, ct * 3)
+            test_output(.caseno, 'compiletime=%ld', ct);
+        END;
+!! 19 compiletime=15
+        [20] : test_output(.caseno, 'lexcond=%ld,%ld',
+                %IF %BPVAL GEQ 32 %THEN 1 %ELSE 0 %FI,
+                %IF %DECLARED (nosuch) %THEN 1 %ELSE %IF %DECLARED (rout) %THEN 2 %ELSE 3 %FI %FI);
+!! 20 lexcond=1,2
+    TES;
+END;
+
+END
+ELUDOM
