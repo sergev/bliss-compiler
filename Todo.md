@@ -3,15 +3,6 @@
 Unsupported BLISS features, in order of implementation. Each task ends with
 a test in `tests/language/` and an update to `docs/Bliss_Manual.md`.
 
-## T2. Overlapping fields in PRESET
-
-`PRESET` with fields that share bits in one unit gives PROVERLAP.
-
-- `lib/llvmgen/llvm_symgen.c` (~lines 438, 451): instead of skipping the
-  field, OR its bits into the current cell. Overlap is only an error when
-  two fields set the same bits.
-- Test: BLOCK with `[0,0,4,0]` and `[0,4,4,0]` preset; check the byte.
-
 ## T3. ACTUALCOUNT and ACTUALPARAMETER
 
 Both report UNDCLNAME.

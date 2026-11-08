@@ -27,7 +27,6 @@
 
 // Upper bound on the number of expressions we'll process in
 // a PRESET attribute.
-#define LLVMGEN_K_MAXPRESETS 128
 
 /*
  * Tracking structures attached to symbols, used with
@@ -313,213 +312,152 @@ llvmgen_initializer (gencodectx_t gctx, initval_t *ivlist, unsigned int padcount
 } /* llvmgen_initializer */
 
 /*
+ * preset_field
+ *
+ * Gets the unit offset, bit position, size and sign extension of
+ * a PRESET item's field.
+ */
+static int
+preset_field (gencodectx_t gctx, expr_node_t *exp, unsigned int *o,
+              unsigned int *p, unsigned int *s, int *e)
+{
+    if (expr_type(exp) == EXPTYPE_PRIM_STRUREF) {
+        exp = expr_struref_accexpr(exp);
+    }
+    if (expr_type(exp) == EXPTYPE_PRIM_SEG) {
+        *o = (unsigned int) expr_seg_offset(exp);
+        *p = 0;
+        *s = expr_seg_width(exp);
+        *e = expr_seg_signext(exp);
+    } else if (expr_type(exp) == EXPTYPE_PRIM_FLDREF) {
+        *o = (unsigned int) expr_seg_offset(expr_fldref_addr(exp));
+        *p = (unsigned int) expr_litval(expr_fldref_pos(exp));
+        *s = (unsigned int) expr_litval(expr_fldref_size(exp));
+        *e = expr_fldref_signext(exp);
+    } else {
+        expr_signal(gctx->ectx, STC__INTCMPERR, "preset_field");
+        return 0;
+    }
+    return 1;
+
+} /* preset_field */
+
+/*
  * llvmgen_presetter
  *
- * Sets up an initializer for a PRESET attribute.  This is more complicated
- * than INITIAL handling, since we have to order the initializers here by
- * offset from the base address.  Once we have computed all of the initializers
- * and put them in the correct order, we can generate an array of LLVMValueRefs
- * and create the initializer.
+ * Builds the initializer for a PRESET attribute. Literal values are
+ * OR-ed into a byte image of the segment, so fields that share a unit
+ * work; addresses (relocatable) become separate elements between
+ * the byte runs.
  */
 static LLVMValueRef
 llvmgen_presetter (gencodectx_t gctx, initval_t *ivlist, unsigned int padding)
 {
-    machinedef_t *mach = gctx->mach;
-    unsigned int bpunit = machine_unit_bits(mach);
-    unsigned int bpaddr = machine_addr_bits(mach);
-    struct preset_s {
-        unsigned int o, p, s, e;
+    unsigned int bpunit = machine_unit_bits(gctx->mach);
+    unsigned int bpaddr = machine_addr_bits(gctx->mach);
+    struct addrcell_s {
+        unsigned int o;
         LLVMValueRef val;
-        LLVMTypeRef type;
-    } pcells[LLVMGEN_K_MAXPRESETS];
-    struct preset_s *parr[LLVMGEN_K_MAXPRESETS] = { 0 };
-    unsigned int curoff, curbitpos, arrsize;
-    int pcount, i;
+    } *acells, tmp;
+    unsigned char *image, *used;
+    unsigned int o, p, s, b, nbytes, ncells, nacells, i, j, k, start;
+    int e;
     initval_t *iv;
-    LLVMValueRef *varr, *valp, oneval = 0, initconst;
+    LLVMValueRef *varr, result;
 
-    if (bpunit == 0 || bpaddr == 0) {
+    if (bpunit != 8 || bpaddr % 8 != 0) {
         expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_presetter[0]");
         return 0;
     }
-    pcount = 0;
-    for (iv = ivlist; iv != 0 && pcount < LLVMGEN_K_MAXPRESETS; iv = iv->next) {
-        expr_node_t *exp = iv->preset_expr;
-        struct preset_s *this = &pcells[pcount];
-        if (expr_type(exp) == EXPTYPE_PRIM_STRUREF) {
-            exp = expr_struref_accexpr(exp);
-        }
-        if (expr_type(exp) == EXPTYPE_PRIM_SEG) {
-            this->o = (unsigned int) expr_seg_offset(exp);
-            this->p = 0;
-            this->s = expr_seg_width(exp);
-            this->e = (unsigned int) expr_seg_signext(exp);
-        } else if (expr_type(exp) == EXPTYPE_PRIM_FLDREF) {
-            this->o = (unsigned int) expr_seg_offset(expr_fldref_addr(exp));
-            this->p = (unsigned int) expr_litval(expr_fldref_pos(exp));
-            // Everything here is in units, so fix any oversized positions
-            if (this->p > bpunit) {
-                this->o += this->p / bpunit;
-                this->p = this->p % bpunit;
-            }
-            this->s = (unsigned int) expr_litval(expr_fldref_size(exp));
-            this->e = (unsigned int) expr_fldref_signext(exp);
-        } else {
-            // Should never get here
-            expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_presetter[1]");
+    nbytes = ncells = 0;
+    for (iv = ivlist; iv != 0; iv = iv->next) {
+        if (!preset_field(gctx, iv->preset_expr, &o, &p, &s, &e)) continue;
+        if (o + (p + s + 7) / 8 > nbytes) nbytes = o + (p + s + 7) / 8;
+        ncells += 1;
+    }
+    if (ncells == 0) {
+        expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_presetter[1]");
+        return 0;
+    }
+    nbytes += padding;
+    image = calloc(nbytes, 1);
+    used = calloc(nbytes, 1);
+    acells = calloc(ncells, sizeof(struct addrcell_s));
+    nacells = 0;
+    for (iv = ivlist; iv != 0; iv = iv->next) {
+        expr_node_t *exp = iv->data.scalar.expr;
+        unsigned int first;
+        if (!preset_field(gctx, iv->preset_expr, &o, &p, &s, &e)) continue;
+        if (expr_type(exp) == EXPTYPE_PRIM_SEG && (s != bpaddr || p % 8 != 0)) {
+            expr_signal(gctx->ectx, STC__PRINVADSZ);
             continue;
         }
-        exp = iv->data.scalar.expr;
-        if (expr_type(exp) == EXPTYPE_PRIM_LIT) {
-            this->type = LLVMIntTypeInContext(gctx->llvmctx, this->s);
-            this->val = LLVMConstInt(this->type, (unsigned long long int) expr_litval(exp),
-                                     this->e);
-        } else if (expr_type(exp) == EXPTYPE_PRIM_SEG) {
-            long offset = expr_seg_offset(exp);
-            LLVMValueRef v, o;
-            LLVMTypeRef t;
-            if (this->s != bpaddr) {
-                expr_signal(gctx->ectx, STC__PRINVADSZ);
-                continue;
-            }
-            v = llvmgen_segaddress(gctx, expr_seg_name(exp), 0, 0, &t);
-            if (offset == 0) {
-                this->val = v;
-                this->type = t;
-            } else {
-                unsigned int bpval = machine_scalar_bits(gctx->mach);
-                LLVMTypeRef inttype = LLVMIntTypeInContext(gctx->llvmctx, bpval);
-                LLVMTypeRef unittype = LLVMIntTypeInContext(gctx->llvmctx, bpunit);
-                o = LLVMConstInt(inttype, (unsigned long long int) offset, 1);
-                this->val = LLVMConstGEP2(unittype, v, &o, 1);
-            }
-        } else {
+        if (expr_type(exp) != EXPTYPE_PRIM_LIT && expr_type(exp) != EXPTYPE_PRIM_SEG) {
             expr_signal(gctx->ectx, STC__PRBADVALUE);
             continue;
         }
-        // Insert in order by offset+position
-        for (i = 0; i < pcount; i++) {
-            if (this->o < parr[i]->o ||
-                (this->o == parr[i]->o && this->p < parr[i]->p)) {
-                break;
-            }
+        first = o * 8 + p;
+        for (b = first; b < first + s; b++) {
+            if (used[b / 8] & (1 << (b % 8))) break;
         }
-        // If we are inserting into the middle of the list, make room
-        if (i < pcount) {
-            int j;
-            for (j = pcount+1; j > i; j--) {
-                parr[j] = parr[j-1];
-            }
-        }
-        parr[i] = this;
-        pcount += 1;
-
-    } /* loop through ivlist */
-
-    // Signal the user if we ran out of preset cells
-    if (iv != 0) {
-        expr_signal(gctx->ectx, STC__EXCPRLIMIT);
-    }
-
-    if (pcount == 0) {
-        expr_signal(gctx->ectx, STC__INTCMPERR, "llvmgen_presetter[2]");
-        return 0;
-    }
-
-    // At this point, the parr[] array contains a list of pointers
-    // to the initialization cells, in order by offset/bit-position within
-    // the memory block.  We can now compute the number of initializer
-    // values we need, including any gaps that need to be zero-filled.
-    arrsize = 0;
-    curoff = curbitpos = 0;
-    for (i = 0; i < pcount; i++) {
-        struct preset_s *this = parr[i];
-        if (curoff > this->o) {
-            // XXX punt on overlaps
+        if (b < first + s) {
             expr_signal(gctx->ectx, STC__PROVERLAP);
-            parr[i] = 0; // to skip it
             continue;
         }
-        if (this->o > curoff) {
-            // need a zero-fill up to the current offset, plus one
-            // for the bits up to the field's bit position, if non-zero,
-            // plus one for padding the previous value if its size
-            // was not an integral number of units
-            arrsize += 1 + (this->p == 0 ? 0 : 1) + (curbitpos == 0 ? 0 : 1);
+        for (b = first; b < first + s; b++) {
+            used[b / 8] |= 1 << (b % 8);
+        }
+        if (expr_type(exp) == EXPTYPE_PRIM_LIT) {
+            unsigned long long v = (unsigned long long) expr_litval(exp);
+            for (b = 0; b < s && b < 64; b++) {
+                if ((v >> b) & 1) {
+                    image[(first + b) / 8] |= 1 << ((first + b) % 8);
+                }
+            }
         } else {
-            // check for overlap from the last field to this one
-            // XXX for now, just punt on these
-            if (curbitpos > this->p) {
-                expr_signal(gctx->ectx, STC__PROVERLAP);
-                parr[i] = 0;  // to skip it later
-                continue;
+            long offset = expr_seg_offset(exp);
+            LLVMValueRef v = llvmgen_segaddress(gctx, expr_seg_name(exp), 0, 0, 0);
+            if (offset != 0) {
+                LLVMValueRef off = LLVMConstInt(gctx->fullwordtype,
+                                                (unsigned long long) offset, 1);
+                v = LLVMConstGEP2(gctx->unittype, v, &off, 1);
             }
-            if (this->p > curbitpos) {
-                arrsize += 1; // need a zero-fill up to the current bit position
-            }
+            acells[nacells].o = first / 8;
+            acells[nacells].val = v;
+            nacells += 1;
         }
-        curoff = this->o;
-        curbitpos = this->p + this->s;
-        if (curbitpos >= bpunit) {
-            curoff += curbitpos / bpunit;
-            curbitpos = curbitpos % bpunit;
-        }
-        arrsize += 1; // for the value itself
     }
 
-    // Fill out the last unit, if needed
-    if (curbitpos != 0) {
-        arrsize += 1;
-    }
-    if (padding != 0) {
-        arrsize += 1;
+    // Sort the address cells by offset
+    for (i = 1; i < nacells; i++) {
+        tmp = acells[i];
+        for (j = i; j > 0 && acells[j-1].o > tmp.o; j--) {
+            acells[j] = acells[j-1];
+        }
+        acells[j] = tmp;
     }
 
-    if (arrsize == 1) {
-        varr = &oneval;
-    } else {
-        varr = malloc(arrsize * sizeof(LLVMValueRef));
-        memset(varr, 0, arrsize * sizeof(LLVMValueRef));
-    }
-
-    curoff = curbitpos = 0;
-    for (valp = varr, i = 0; i < pcount; i++) {
-        struct preset_s *this = parr[i];
-        if (this == 0) continue;
-        if (this->o > curoff) {
-            if (curbitpos != 0) {
-                *valp++ = LLVMConstNull(LLVMIntTypeInContext(gctx->llvmctx,
-                                                             bpunit - curbitpos));
-            }
-            *valp++ = LLVMConstNull(LLVMArrayType(LLVMInt8TypeInContext(gctx->llvmctx),
-                                                  this->o - curoff));
-            curbitpos = 0;
+    // Byte runs between the address cells
+    varr = malloc((2 * nacells + 1) * sizeof(LLVMValueRef));
+    k = start = 0;
+    for (i = 0; i < nacells; i++) {
+        if (acells[i].o > start) {
+            varr[k++] = LLVMConstStringInContext(gctx->llvmctx, (char *) image + start,
+                                                 acells[i].o - start, 1);
         }
-        if (this->p > curbitpos) {
-            *valp++ = LLVMConstNull(LLVMIntTypeInContext(gctx->llvmctx,
-                                                         this->p - curbitpos));
-        }
-        *valp++ = this->val;
-        curoff = this->o;
-        curbitpos = this->p + this->s;
-        if (curbitpos >= bpunit) {
-            curoff += curbitpos / bpunit;
-            curbitpos = curbitpos % bpunit;
-        }
+        varr[k++] = acells[i].val;
+        start = acells[i].o + bpaddr / 8;
     }
-    if (curbitpos != 0) {
-        *valp++ = LLVMConstNull(LLVMIntTypeInContext(gctx->llvmctx, bpunit - curbitpos));
+    if (start < nbytes) {
+        varr[k++] = LLVMConstStringInContext(gctx->llvmctx, (char *) image + start,
+                                             nbytes - start, 1);
     }
-    if (padding != 0) {
-        *valp = LLVMConstNull(LLVMArrayType(LLVMIntTypeInContext(gctx->llvmctx, bpunit),
-                                              padding));
-    }
-    if (arrsize == 1) {
-        return oneval;
-    }
-    initconst = LLVMConstStructInContext(gctx->llvmctx, varr, arrsize, 1);
+    result = (k == 1) ? varr[0] : LLVMConstStructInContext(gctx->llvmctx, varr, k, 1);
     free(varr);
-    return initconst;
+    free(acells);
+    free(used);
+    free(image);
+    return result;
 
 } /* llvmgen_presetter */
 

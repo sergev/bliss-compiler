@@ -16,6 +16,14 @@ FIELD
         nd_data = [2, 0, %BPVAL, 0]
     TES;
 
+FIELD
+    pk_fields = SET
+        pk_lo = [0, 0, 4, 0],
+        pk_hi = [0, 4, 4, 0],
+        pk_w = [0, 8, 16, 0],
+        pk_ptr = [1, 0, %BPVAL, 0]
+    TES;
+
 LITERAL
     node_size = 3;
 
@@ -38,7 +46,11 @@ OWN
     rg : ring,
     rg8 : ring [8],
     m1 : matrix1 [2, 3],
-    wv;
+    wv,
+    ! PRESET fields that share a unit (LRM 9.7)
+    pbits : BITVECTOR [7] PRESET ([0] = 1, [1] = 0, [3] = 1, [2] = 0, [5] = 1),
+    pblk : BLOCK [2] FIELD (pk_fields) PRESET ([pk_hi] = 5, [pk_lo] = 3,
+                                               [pk_w] = %X'1234', [pk_ptr] = pbits);
 
 ROUTINE node_sum (n : REF BLOCK FIELD (node_fields)) =
 BEGIN
@@ -53,13 +65,13 @@ BEGIN
     .s
 END;
 
-test_setup(numcases=23);
+test_setup(numcases=24);
 
 GLOBAL ROUTINE runtest (caseno) : NOVALUE =
 BEGIN
     LOCAL v, p, s;
 
-    CASE .caseno FROM 1 TO 23 OF
+    CASE .caseno FROM 1 TO 24 OF
     SET
         [1] : BEGIN
             ub[0] = 255; ub[1] = 256 + 7;
@@ -206,6 +218,12 @@ BEGIN
                 .nd2[nd_sval], .BLOCKVECTOR [nodes, 1, nd_data; 2, node_size], .nodes[1, nd_data]);
         END;
 !! 23 genfield=5,-2,66,66
+        [24] : BEGIN
+            LOCAL lb : BLOCK [1] FIELD (pk_fields) PRESET ([pk_lo] = 7, [pk_hi] = 1, [pk_w] = 9);
+            test_output(.caseno, 'presetpack=%lx,%lx,%ld,%lx', .pbits, .pblk[0, 0, 32, 0],
+                .pblk[pk_ptr] EQLA pbits, .lb);
+        END;
+!! 24 presetpack=29,123453,1,917
     TES;
 END;
 

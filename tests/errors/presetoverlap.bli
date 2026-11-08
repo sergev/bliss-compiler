@@ -1,0 +1,15 @@
+MODULE test =
+BEGIN
+
+! PRESET fields must not overlap (LRM 9.7.2).
+
+FIELD
+    f1 = [0, 0, 8, 0],
+    f2 = [0, 4, 8, 0];
+
+OWN
+    b : BLOCK [1] FIELD (f1, f2) PRESET ([f1] = 1, [f2] = 2);
+!! cerr %BLISS-E-PROVERLAP,
+
+END
+ELUDOM

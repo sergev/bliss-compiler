@@ -492,6 +492,13 @@ OWN
 A `SIGNED BYTE` holding 255 reads back as -1; an `UNSIGNED BYTE` (the
 default) reads 255.
 
+`PRESET` items can name fields of a `BLOCK` or bits of a `BITVECTOR`; the
+rest is zero. Fields may share a unit but must not overlap (LRM 9.7):
+
+```bliss
+OWN mask : BITVECTOR [8] PRESET ([0] = 1, [3] = 1);        ! %B'1001'
+```
+
 ## 11. Literals and BIND
 
 (LRM 14)
