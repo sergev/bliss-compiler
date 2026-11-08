@@ -1031,12 +1031,28 @@ expr_parse_arglist (expr_ctx_t ctx, expr_node_t *rtn)
                 memset(&attr, 0, sizeof(attr));
                 attr.dclass = DCLASS_STACKONLY;
                 attr.units = machine_scalar_units(ctx->mach);
+                attr.width = machine_scalar_bits(ctx->mach);
                 attr.flags = (machine_addr_signed(ctx->mach) ? SYM_M_SIGNEXT : 0);
-                attr.ivlist = expr_initval_add(ctx, 0, exp, machine_scalar_units(ctx->mach));
                 attr.sc = SYMSCOPE_LOCAL;
                 tmpsym = datasym_declare(scope, &str, &attr, pos);
-                arg = expr_node_alloc(ctx, EXPTYPE_PRIM_SEG, pos);
-                expr_seg_name_set(arg, tmpsym);
+                // Evaluate at the call: pass (tmp = exp; tmp)
+                {
+                    expr_node_t *dst, *addr, *assign;
+                    dst = expr_node_alloc(ctx, EXPTYPE_PRIM_SEG, pos);
+                    expr_seg_name_set(dst, tmpsym);
+                    expr_seg_width_set(dst, attr.width);
+                    expr_has_value_set(dst, 1);
+                    addr = expr_node_alloc(ctx, EXPTYPE_PRIM_SEG, pos);
+                    expr_seg_name_set(addr, tmpsym);
+                    expr_seg_width_set(addr, attr.width);
+                    expr_has_value_set(addr, 1);
+                    assign = parse_op_expr(ctx, OPER_ASSIGN, dst, exp);
+                    arg = expr_node_alloc(ctx, EXPTYPE_PRIM_BLK, pos);
+                    exprseq_instail(expr_blk_seq(arg), assign);
+                    exprseq_instail(expr_blk_seq(arg), addr);
+                    expr_blk_valexp_set(arg, addr);
+                    expr_has_value_set(arg, 1);
+                }
             } else if (!expr_parse_expr(ctx, &arg)) {
                 // Use a zero literal expression for missing/erroneous parameters
                 arg = expr_node_alloc(ctx, EXPTYPE_PRIM_LIT, parser_curpos(pctx));
