@@ -166,13 +166,16 @@ name_bind (lexctx_t lctx, void *ctx, quotelevel_t ql, quotemodifier_t qm,
     np = name_search(pctx->curscope, ltext->ptr, nlen, &nt);
 
     // Check for lexical conditional skips
+    // A nested %IF must be seen even while skipping, so that
+    // its %FI is not taken as ending the outer conditional
     if (cs == COND_CWA) {
-        if (np == 0 || (nt != LEXTYPE_LXF_ELSE && nt != LEXTYPE_LXF_FI)) {
+        if (np == 0 || (nt != LEXTYPE_LXF_ELSE && nt != LEXTYPE_LXF_FI &&
+                        nt != LEXTYPE_LXF_IF)) {
             lexeme_free(lctx, lex);
             return 1;
         }
     } else if (cs == COND_AWC) {
-        if (np == 0 || nt != LEXTYPE_LXF_FI) {
+        if (np == 0 || (nt != LEXTYPE_LXF_FI && nt != LEXTYPE_LXF_IF)) {
             lexeme_free(lctx, lex);
             return 1;
         }
