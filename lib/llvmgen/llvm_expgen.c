@@ -112,7 +112,7 @@ llvmgen_addr_expression (gencodectx_t gctx, expr_node_t *exp,
         long off = expr_seg_offset(base);
         llvm_stgclass_t valclass;
         unsigned int sflags;
-        addr = llvmgen_segaddress(gctx, expr_seg_name(base), &valclass, &sflags);
+        addr = llvmgen_segaddress(gctx, expr_seg_name(base), &valclass, &sflags, 0);
         if (valclass == LLVM_REG && accinfo == 0 &&
             (sflags & (LLVMGEN_M_SEG_DEREFED|LLVMGEN_M_SEG_ISBIND)) == 0) {
             // XXX
@@ -296,9 +296,7 @@ gen_routine_call (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
 
     if (expr_type(rtnexp) == EXPTYPE_PRIM_SEG &&
         name_type(expr_seg_name(rtnexp)) == LEXTYPE_NAME_ROUTINE) {
-        rtnadr = LLVMGetNamedFunction(gctx->module, name_azstring(expr_seg_name(rtnexp)));
-        type = LLVMGlobalGetValueType(rtnadr);
-        rettype = LLVMGetReturnType(type);
+        rtnadr = llvmgen_rtntype_info(gctx, expr_seg_name(rtnexp), &type, &rettype);
         formalcount = LLVMCountParamTypes(type);
     } else {
         rettype = gctx->fullwordtype;
@@ -358,13 +356,6 @@ gen_noop (gencodectx_t gctx, expr_node_t *exp, LLVMTypeRef neededtype)
 void
 llvmgen_expgen_init (gencodectx_t gctx)
 {
-    unsigned int bpunit = machine_unit_bits(gctx->mach);
-    unsigned int bpval = machine_scalar_bits(gctx->mach);
-
-    gctx->unittype = LLVMIntTypeInContext(gctx->llvmctx, bpunit);
-    gctx->unitptrtype = LLVMPointerTypeInContext(gctx->llvmctx, 0);
-    gctx->fullwordtype = LLVMIntTypeInContext(gctx->llvmctx, bpval);
-
     llvmgen_expgen_register(gctx, EXPTYPE_PRIM_LIT, gen_literal);
     llvmgen_expgen_register(gctx, EXPTYPE_PRIM_SEG, gen_seg_or_fieldref);
     llvmgen_expgen_register(gctx, EXPTYPE_PRIM_FLDREF, gen_seg_or_fieldref);

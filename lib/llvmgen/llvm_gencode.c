@@ -7,13 +7,14 @@
  * points and some common routines shared by the other
  * llvmgen modules.
  *
- * Copyright © 2012, 2013  Matthew Madison.
+ * Copyright © 2012-2024, Matthew Madison.
  * All rights reserved.
  * Distributed under license. See LICENSE.TXT for details.
  *--
  */
 
 #include "llvmgen.h"
+#include "llvm-c/Transforms/PassBuilder.h"
 #include "blissc/switches.h"
 #include <assert.h>
 
@@ -237,7 +238,7 @@ llvmgen_cast_trunc_ext (gencodectx_t gctx, LLVMValueRef val, LLVMTypeRef neededt
             }
             return LLVMBuildZExt(builder, val, neededtype, llvmgen_temp(gctx));
         }
-    } else if (needkind == LLVMPointerTypeKind) {
+    } else { // Need a pointer
         val = llvmgen_adjustval(gctx, val, gctx->intptrtszype, machine_addr_signed(gctx->mach));
         if (constcast) {
             return LLVMConstIntToPtr(val, neededtype);
@@ -361,19 +362,22 @@ gencode_module_end (gencodectx_t gctx, name_t *np)
 {
     char *err;
 
-    LLVMVerifyModule(gctx->module, LLVMPrintMessageAction, 0);
     if (gctx->optlevel > 0) {
-        LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
-        LLVMErrorRef perr = LLVMRunPasses(gctx->module,
-            "function(aggressive-instcombine,instcombine,reassociate,gvn,simplifycfg)",
-            gctx->mctx->target_machine, opts);
-        if (perr != 0) {
-            char *msg = LLVMGetErrorMessage(perr);
-            fprintf(stderr, "%s\n", msg);
-            LLVMDisposeErrorMessage(msg);
+        LLVMPassBuilderOptionsRef pass_builder_options = LLVMCreatePassBuilderOptions();
+        LLVMErrorRef llvm_error;
+
+        LLVMPassBuilderOptionsSetVerifyEach(pass_builder_options, 1);
+        llvm_error = LLVMRunPasses(gctx->module,
+                                   "require<basic-aa>,aggressive-instcombine,reassociate,gvn,simplifycfg",
+                                   gctx->mctx->target_machine, pass_builder_options);
+        if (llvm_error) {
+            err = LLVMGetErrorMessage(llvm_error);
+            fprintf(stderr, "%s\n", err);
+            LLVMDisposeErrorMessage(err);
         }
-        LLVMDisposePassBuilderOptions(opts);
+        LLVMDisposePassBuilderOptions(pass_builder_options);
     }
+    LLVMVerifyModule(gctx->module, LLVMPrintMessageAction, 0);
     if (gctx->mctx->irdumpfile != 0) {
         err = 0;
         if (LLVMPrintModuleToFile(gctx->module, gctx->mctx->irdumpfile, &err)) {
