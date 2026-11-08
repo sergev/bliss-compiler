@@ -1,0 +1,57 @@
+MODULE test =
+BEGIN
+
+LIBRARY 'testharness.lib';
+
+STRUCTURE matrix [i, j; n, m] = [n*m*%UPVAL] (matrix + (i*m + j)*%UPVAL);
+
+OWN
+    mx : matrix [3, 3],
+    dst : VECTOR [CH$ALLOCATION(8)];
+
+ROUTINE twice (x) = .x * 2;
+
+BIND ROUTINE dbl = twice;
+
+ROUTINE apply (f, v) =
+BEGIN
+    BIND ROUTINE g = .f;
+    g(.v)
+END;
+
+BIND upcase = CH$TRANSTABLE(REP 97 OF (0), 'ABC');
+
+test_setup(numcases=6);
+
+GLOBAL ROUTINE runtest (caseno) : NOVALUE =
+BEGIN
+    CASE .caseno FROM 1 TO 6 OF
+    SET
+        [1] : BEGIN
+            ! Store through a structure with computed indices
+            INCR i FROM 0 TO 2 DO INCR j FROM 0 TO 2 DO mx[.i, .j] = .i * 10 + .j;
+            test_output(.caseno, 'mx[2,1]=%d', .mx[2, 1]);
+        END;
+!! 1 mx[2,1]=21
+        [2] : test_output(.caseno, 'eql=%d,%d',
+                CH$EQL(3, CH$PTR(UPLIT('abc')), 3, CH$PTR(UPLIT('abc'))),
+                CH$EQL(3, CH$PTR(UPLIT('abc')), 3, CH$PTR(UPLIT('abd'))));
+!! 2 eql=1,0
+        [3] : test_output(.caseno, 'eqlfill=%d',
+                CH$EQL(3, CH$PTR(UPLIT('ab ')), 2, CH$PTR(UPLIT('ab')), %C' '));
+!! 3 eqlfill=1
+        [4] : test_output(.caseno, 'dbl=%d', dbl(21));
+!! 4 dbl=42
+        [5] : test_output(.caseno, 'apply=%d', apply(twice, 5));
+!! 5 apply=10
+        [6] : BEGIN
+            CH$TRANSLATE(upcase, 3, CH$PTR(UPLIT('abc')), %C'-', 5, CH$PTR(dst));
+            CH$WCHAR(0, CH$PTR(dst, 5));
+            test_output(.caseno, 'tr=%s', dst);
+        END;
+!! 6 tr=ABC--
+    TES;
+END;
+
+END
+ELUDOM
