@@ -848,7 +848,7 @@ parse_block (expr_ctx_t ctx, lextype_t curlt, expr_node_t **expp,
             // Declarations are allowed only if we haven't
             // yet seen an expressions in the block
             if (exprseq_length(&seq) != 0) {
-                expr_signal(ctx, STC__INTCMPERR, "parse_block");
+                expr_signal(ctx, STC__DCLAFTEXP);
                 lexeme_free(ctx->lctx, lex);
                 parser_skip_to_delim(pctx, closer);
                 endpos = parser_curpos(pctx);
